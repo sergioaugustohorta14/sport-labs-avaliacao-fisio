@@ -52,7 +52,7 @@ def _tela_login() -> None:
         <style>
         html, body {{ color-scheme: dark; }}
         [data-testid="stAppViewContainer"], [data-testid="stHeader"] {{
-            background: radial-gradient(circle at 50% 0%, #1b2436 0%, #10141f 55%, #0c0f17 100%);
+            background: radial-gradient(circle at 50% 0%, #1c1c1c 0%, #121212 55%, #090909 100%);
         }}
         [data-testid="stMain"] .block-container {{ padding-top: 4rem; max-width: 30rem; }}
         #MainMenu, footer {{ visibility: hidden; }}

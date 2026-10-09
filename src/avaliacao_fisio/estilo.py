@@ -1,6 +1,7 @@
-"""Tema visual do Tablet de Avaliação — identidade "neon" azul/ciano sobre
-fundo navy escuro (decisão de 09/10/2026: visual próprio deste app,
-deliberadamente diferente do cinza "Sport Labs" do Feegow-Analytics).
+"""Tema visual do Tablet de Avaliação — identidade "neon" preto/branco/
+dourado (decisão de 09/10/2026, ajustada no mesmo dia pra usar as cores
+reais da marca Sport Labs em vez de um azul/ciano genérico: visual
+próprio deste app, deliberadamente diferente do cinza do Feegow-Analytics).
 Fonte Inter e botões grandes pra toque continuam do desenho original.
 """
 from __future__ import annotations
@@ -9,14 +10,14 @@ import streamlit as st
 
 FONTE_GOOGLE_QUERY = "Inter:wght@400;500;600;700"
 
-COR_FUNDO = "#121826"
-COR_SURFACE = "#1b2435"
-COR_TEXTO = "#eef2f7"
-COR_MUTED = "#8b96ab"
-COR_BORDA = "rgba(56, 211, 255, 0.35)"
-COR_GLOW = "rgba(56, 211, 255, 0.28)"
-COR_TEXTO_SOBRE_GRADIENTE = "#0b1420"
-GRADIENTE_PRIMARIO = "linear-gradient(90deg, #2f6fff 0%, #22e8e0 100%)"
+COR_FUNDO = "#121212"
+COR_SURFACE = "#1a1a1a"
+COR_TEXTO = "#f3efe6"
+COR_MUTED = "#9c9690"
+COR_BORDA = "rgba(212, 175, 95, 0.35)"
+COR_GLOW = "rgba(212, 175, 95, 0.30)"
+COR_TEXTO_SOBRE_GRADIENTE = "#1a1407"
+GRADIENTE_PRIMARIO = "linear-gradient(90deg, #9c7a2e 0%, #f0cf7a 50%, #b8902f 100%)"
 
 
 def injetar_tema() -> None:
@@ -37,7 +38,7 @@ def injetar_tema() -> None:
         }}
 
         [data-testid="stAppViewContainer"], [data-testid="stHeader"] {{
-            background: radial-gradient(circle at 50% 0%, #1b2436 0%, #10141f 55%, #0c0f17 100%);
+            background: radial-gradient(circle at 50% 0%, #1c1c1c 0%, #121212 55%, #090909 100%);
         }}
         [data-testid="stMain"] .block-container {{
             max-width: 52rem; padding-top: 2rem; padding-bottom: 8rem;
@@ -119,12 +120,12 @@ def injetar_tema() -> None:
         /* Cartões com brilho (ver `cartao()`) — envolvem os seletores da
         tela inicial, mesmo padrão visual do mockup aprovado em 09/10/2026. */
         [class*="st-key-cartao_"] {{
-            background: rgba(27, 36, 53, 0.55);
+            background: rgba(26, 26, 26, 0.65);
             border: 1px solid {COR_BORDA};
             border-radius: 14px;
             padding: 18px 20px 6px;
             margin-bottom: 14px;
-            box-shadow: 0 0 22px rgba(56, 211, 255, 0.10);
+            box-shadow: 0 0 22px rgba(212, 175, 95, 0.12);
         }}
 
         .sl-progresso {{
