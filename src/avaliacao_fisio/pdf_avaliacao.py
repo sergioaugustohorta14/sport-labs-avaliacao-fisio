@@ -176,6 +176,25 @@ def _elementos_dor(secao_saida: dict) -> list:
     return elementos
 
 
+def _elementos_fotos(secao_saida: dict) -> list:
+    fotos = secao_saida["fotos"]
+    if not fotos:
+        return [Paragraph("Nenhuma foto registrada.", _CELULA)]
+    elementos: list = []
+    for foto in fotos:
+        try:
+            imagem = Image(io.BytesIO(foto["foto_bytes"]), width=8 * cm, height=6 * cm, kind="proportional")
+        except Exception:
+            continue
+        imagem.hAlign = "CENTER"
+        elementos.append(imagem)
+        if foto.get("descricao"):
+            legenda = ParagraphStyle("LegendaFoto", parent=_ESTILOS["Normal"], fontSize=9, alignment=1, spaceBefore=2)
+            elementos.append(Paragraph(foto["descricao"], legenda))
+        elementos.append(Spacer(1, 0.4 * cm))
+    return elementos
+
+
 def _valor_campo(dados: dict, secao_id: str, campo_id: str):
     for secao_saida in dados["secoes"]:
         if secao_saida["id"] == secao_id and secao_saida["tipo"] == "secao":
@@ -205,6 +224,8 @@ def gerar(dados: dict) -> bytes:
             elementos.extend(_tabela_secao_repetivel(secao_saida))
         elif secao_saida["tipo"] == "dor":
             elementos.extend(_elementos_dor(secao_saida))
+        elif secao_saida["tipo"] == "fotos":
+            elementos.extend(_elementos_fotos(secao_saida))
         elementos.append(Spacer(1, 0.3 * cm))
 
     elementos.append(Spacer(1, 1.5 * cm))

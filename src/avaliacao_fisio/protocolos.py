@@ -65,10 +65,20 @@ class SecaoDor:
 
 
 @dataclass(frozen=True)
+class SecaoFotos:
+    """Seção repetível de registros fotográficos (câmera do tablet/celular),
+    pra ilustrar o PDF final — ex.: "Teste de Thomas", "Step Down" etc.,
+    mesmo padrão visto nos relatórios de referência."""
+
+    id: str
+    titulo: str
+
+
+@dataclass(frozen=True)
 class Protocolo:
     id: str
     nome: str
-    secoes: tuple[object, ...]  # Secao | SecaoRepetivel | SecaoDor
+    secoes: tuple[object, ...]  # Secao | SecaoRepetivel | SecaoDor | SecaoFotos
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +114,8 @@ TESTES_ADICIONAIS = SecaoRepetivel(
     ),
     minimo_linhas=0,
 )
+
+FOTOS = SecaoFotos(id="fotos", titulo="Registros Fotográficos")
 
 DOR = SecaoDor(
     id="dor",
@@ -236,6 +248,7 @@ PROTOCOLO_MMII = Protocolo(
         _MMII_TERMOGRAFIA,
         DOR,
         TESTES_ADICIONAIS,
+        FOTOS,
         CLASSIFICACAO_RISCO,
         RESPONSAVEL,
     ),
@@ -287,6 +300,7 @@ PROTOCOLO_MMSS = Protocolo(
         _MMSS_Y_BALANCE,
         DOR,
         TESTES_ADICIONAIS,
+        FOTOS,
         CLASSIFICACAO_RISCO,
         RESPONSAVEL,
     ),

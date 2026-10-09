@@ -32,6 +32,7 @@ from avaliacao_fisio.protocolos import (
     Protocolo,
     Secao,
     SecaoDor,
+    SecaoFotos,
     SecaoRepetivel,
 )
 
@@ -242,6 +243,50 @@ def renderizar_secao_dor(secao: SecaoDor) -> None:
             st.rerun()
 
 
+def renderizar_secao_fotos(secao: SecaoFotos) -> None:
+    st.markdown(f"## {secao.titulo}")
+    st.caption("Tire fotos pela câmera do tablet/celular pra ilustrar o relatório (opcional).")
+
+    chave_n = _chave("n_linhas", secao.id)
+    if chave_n not in st.session_state:
+        st.session_state[chave_n] = 0
+    n_linhas = st.session_state[chave_n]
+
+    for i in range(n_linhas):
+        chave_descricao = _chave(secao.id, f"linha{i}", "descricao")
+        chave_foto = _chave(secao.id, f"linha{i}", "foto")
+
+        valor_descricao = st.text_input(
+            f"Descrição da foto {i + 1}", value=_obter(chave_descricao) or "", key=f"w__{chave_descricao}"
+        )
+        _guardar(chave_descricao, valor_descricao)
+
+        arquivo = st.camera_input(f"Foto {i + 1}", key=f"w__{chave_foto}")
+        if arquivo is not None:
+            _guardar(chave_foto, arquivo.getvalue())
+        elif _obter(chave_foto):
+            # O próprio widget de câmera perde a prévia ao navegar pra
+            # outra seção e voltar (mesma limpeza de session_state que
+            # afeta qualquer widget não desenhado numa execução) — mostra
+            # a foto já salva em `respostas` como substituta.
+            st.image(_obter(chave_foto), width=240, caption="Foto já capturada")
+        st.divider()
+
+    col_add, col_rem = st.columns(2)
+    with col_add:
+        if st.button("➕ Adicionar foto", key=_chave(secao.id, "add")):
+            st.session_state[chave_n] += 1
+            st.rerun()
+    with col_rem:
+        if n_linhas > 0 and st.button("➖ Remover última foto", key=_chave(secao.id, "rem")):
+            ultima = n_linhas - 1
+            respostas = st.session_state.get("respostas", {})
+            respostas.pop(_chave(secao.id, f"linha{ultima}", "descricao"), None)
+            respostas.pop(_chave(secao.id, f"linha{ultima}", "foto"), None)
+            st.session_state[chave_n] -= 1
+            st.rerun()
+
+
 # ---------------------------------------------------------------------------
 # Coleta das respostas (session_state["respostas"] -> dict limpo, pro PDF)
 # ---------------------------------------------------------------------------
@@ -298,6 +343,20 @@ def coletar_respostas(protocolo: Protocolo) -> dict:
                 "escala_repouso": respostas.get(_chave(secao.id, "escala_repouso")),
                 "escala_atividade": respostas.get(_chave(secao.id, "escala_atividade")),
                 "locais": locais, "definicao": secao,
+            })
+        elif isinstance(secao, SecaoFotos):
+            n_linhas = st.session_state.get(_chave("n_linhas", secao.id), 0)
+            fotos = []
+            for i in range(n_linhas):
+                foto_bytes = respostas.get(_chave(secao.id, f"linha{i}", "foto"))
+                if foto_bytes:
+                    fotos.append({
+                        "descricao": respostas.get(_chave(secao.id, f"linha{i}", "descricao")),
+                        "foto_bytes": foto_bytes,
+                    })
+            dados["secoes"].append({
+                "tipo": "fotos", "id": secao.id, "titulo": secao.titulo,
+                "fotos": fotos, "definicao": secao,
             })
         else:  # Secao
             campos_saida = {campo.id: _ler_campo(secao.id, campo) for campo in secao.campos}
@@ -396,6 +455,12 @@ def _passo_revisao(protocolo: Protocolo) -> None:
                     st.table(secao_saida["locais"])
                 else:
                     st.write("Sem locais de dor registrados.")
+            elif secao_saida["tipo"] == "fotos":
+                if secao_saida["fotos"]:
+                    for foto in secao_saida["fotos"]:
+                        st.image(foto["foto_bytes"], width=160, caption=foto.get("descricao") or None)
+                else:
+                    st.write("Nenhuma foto registrada.")
 
     st.divider()
 
@@ -454,6 +519,8 @@ def render() -> None:
         renderizar_secao_repetivel(secao)
     elif isinstance(secao, SecaoDor):
         renderizar_secao_dor(secao)
+    elif isinstance(secao, SecaoFotos):
+        renderizar_secao_fotos(secao)
     else:
         renderizar_secao(secao)
 
