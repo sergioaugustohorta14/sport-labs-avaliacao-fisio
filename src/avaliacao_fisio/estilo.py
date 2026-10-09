@@ -17,6 +17,7 @@ COR_MUTED = "#9c9690"
 COR_BORDA = "rgba(212, 175, 95, 0.35)"
 COR_GLOW = "rgba(212, 175, 95, 0.30)"
 COR_TEXTO_SOBRE_GRADIENTE = "#1a1407"
+COR_ACENTO = "#d4af5f"
 GRADIENTE_PRIMARIO = "linear-gradient(90deg, #9c7a2e 0%, #f0cf7a 50%, #b8902f 100%)"
 
 
@@ -48,12 +49,47 @@ def injetar_tema() -> None:
         h1, h2, h3, h4, h5, h6, p, label, span, div {{ color: {COR_TEXTO}; }}
         [data-testid="stCaptionContainer"] {{ color: {COR_MUTED} !important; }}
 
-        .stTextInput input, .stNumberInput input, .stDateInput input,
+        .stTextInput input, .stNumberInput input,
         div[data-baseweb="select"] > div {{
             background-color: {COR_SURFACE} !important;
             color: {COR_TEXTO} !important;
             border: 1px solid {COR_BORDA} !important;
             border-radius: 8px;
+        }}
+
+        /* `st.date_input` não usa <input> nesta versão do Streamlit — é um
+        campo composto por <span role="spinbutton"> (dia/mês/ano), sem
+        elemento <input> pra casar com a regra acima (achado real,
+        09/10/2026: o campo ficava com o fundo claro padrão). */
+        div[data-testid="stDateInputField"] {{
+            background-color: {COR_SURFACE} !important;
+            border: 1px solid {COR_BORDA} !important;
+            border-radius: 8px !important;
+        }}
+        div[data-testid="stDateInputField"] span {{
+            color: {COR_TEXTO} !important;
+        }}
+
+        /* Slider (escala de dor/intensidade) — Streamlit usa o vermelho
+        padrão do tema (#FF4B4B) pra bolinha e trilho preenchido; classes
+        confirmadas inspecionando o DOM renderizado (`efbyxodN`, labels
+        estáveis do Emotion — não o hash aleatório `st-emotion-cache-*`
+        que muda a cada build). */
+        div[data-testid="stSlider"] [class*="efbyxod3"],
+        div[data-testid="stSlider"] [class*="efbyxod5"] {{
+            background: {COR_ACENTO} !important;
+        }}
+
+        /* Barra lateral (usuário logado / botão Sair) também precisa do
+        tema escuro — por padrão fica no claro do Streamlit. */
+        [data-testid="stSidebar"] {{
+            background-color: {COR_SURFACE} !important;
+        }}
+        [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2,
+        [data-testid="stSidebar"] h3, [data-testid="stSidebar"] p,
+        [data-testid="stSidebar"] span, [data-testid="stSidebar"] div,
+        [data-testid="stSidebar"] label {{
+            color: {COR_TEXTO};
         }}
 
         /* Botões grandes, alvo de toque confortável num tablet. */
