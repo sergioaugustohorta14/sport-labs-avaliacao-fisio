@@ -193,6 +193,18 @@ def injetar_tema() -> None:
             text-transform: uppercase; margin-bottom: 0.25rem;
         }}
         .sl-titulo-secao {{ margin-top: 0; }}
+
+        /* Título da tela inicial — trocado por pedido da diretoria
+        (10/10/2026): o "#" padrão do Streamlit saía grande demais e
+        quebrava a linha de forma feia. "Sport Labs" vira uma etiqueta
+        pequena acima, sem travessão entre os dois. */
+        .sl-eyebrow-topo {{
+            color: {COR_MUTED}; font-size: 0.8rem; font-weight: 600;
+            letter-spacing: 0.22em; text-transform: uppercase; margin-bottom: 2px;
+        }}
+        .sl-titulo-principal {{
+            font-size: 1.8rem; font-weight: 700; margin: 0 0 4px; line-height: 1.25;
+        }}
         </style>
         """,
         unsafe_allow_html=True,

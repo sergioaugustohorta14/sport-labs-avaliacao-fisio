@@ -397,7 +397,8 @@ def _reiniciar() -> None:
 # ---------------------------------------------------------------------------
 
 def _passo_selecao_protocolo() -> None:
-    st.markdown("# Avaliação Cinética Funcional — Sport Labs")
+    st.markdown('<div class="sl-eyebrow-topo">Sport Labs</div>', unsafe_allow_html=True)
+    st.markdown('<h1 class="sl-titulo-principal">Avaliação Cinética Funcional</h1>', unsafe_allow_html=True)
     st.caption("Escolha o protocolo e o tipo de avaliação para começar.")
 
     with estilo.cartao("protocolo"):
