@@ -83,9 +83,13 @@ def _tela_login() -> None:
             transition: background-color 9999s ease-in-out 0s;
         }}
         div[data-testid="stFormSubmitButton"] button {{
-            width: 100%; margin-top: 18px; background: {estilo.COR_TEXTO}; color: {estilo.COR_FUNDO};
+            width: 100%; margin-top: 18px; background: {estilo.COR_TEXTO};
             border: none; border-radius: 6px; padding: 12px 0; font-weight: 600;
             letter-spacing: 0.08em; text-transform: uppercase; font-size: 13px;
+        }}
+        div[data-testid="stFormSubmitButton"] button,
+        div[data-testid="stFormSubmitButton"] button * {{
+            color: {estilo.COR_FUNDO} !important;
         }}
         div[data-testid="stFormSubmitButton"] button:hover {{ background: #ffffff; }}
         div[data-testid="stAlert"] {{ background: #46333a; color: #f3d9de; }}

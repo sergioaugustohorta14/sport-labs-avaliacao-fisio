@@ -62,11 +62,19 @@ def injetar_tema() -> None:
             border-radius: 8px;
             border: 1px solid {COR_BORDA};
         }}
+        /* `*` nos filhos é necessário: a regra genérica de cor de texto
+        (span, div, acima) pinta o texto interno do botão (que o Streamlit
+        envolve num elemento próprio) por cima da cor definida aqui — sem
+        isso o texto escuro ficava invisível num fundo também claro. */
         .stButton button[kind="primary"] {{
-            background: {COR_TEXTO}; color: {COR_FUNDO}; border: none;
+            background: {COR_TEXTO}; border: none;
+        }}
+        .stButton button[kind="primary"],
+        .stButton button[kind="primary"] * {{
+            color: {COR_FUNDO} !important;
         }}
         .stButton button[kind="primary"]:hover {{
-            background: #ffffff; color: {COR_SURFACE};
+            background: #ffffff;
         }}
 
         .sl-progresso {{
