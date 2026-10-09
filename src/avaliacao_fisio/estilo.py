@@ -44,6 +44,12 @@ def injetar_tema() -> None:
         [data-testid="stMain"] .block-container {{
             max-width: 52rem; padding-top: 2rem; padding-bottom: 8rem;
         }}
+        /* Evita que o navegador "corrija" o scroll sozinho quando o
+        conteúdo novo da seção termina de montar com altura diferente da
+        anterior — brigava com o reset forçado em `wizard._rolar_para_topo`. */
+        section[data-testid="stMain"] {{
+            overflow-anchor: none;
+        }}
         #MainMenu, footer {{ visibility: hidden; }}
 
         h1, h2, h3, h4, h5, h6, p, label, span, div {{ color: {COR_TEXTO}; }}

@@ -106,7 +106,7 @@ def _tela_login() -> None:
     else:
         st.markdown(f"<h2 style='text-align:center;color:{estilo.COR_TEXTO};'>Sport Labs</h2>", unsafe_allow_html=True)
 
-    st.markdown('<div class="sl-eyebrow">Tablet de Avaliação · Acesso restrito</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sl-eyebrow">Área de Avaliação · Acesso restrito</div>', unsafe_allow_html=True)
 
     with st.form("login_form"):
         usuario = st.text_input("Usuário")

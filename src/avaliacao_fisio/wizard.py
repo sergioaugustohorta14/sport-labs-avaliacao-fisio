@@ -18,8 +18,10 @@ do Streamlit, que `pdf_avaliacao.gerar()` consome.
 from __future__ import annotations
 
 import datetime as dt
+import time
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from avaliacao_fisio import estilo, pdf_avaliacao
 from avaliacao_fisio.protocolos import (
@@ -36,6 +38,35 @@ from avaliacao_fisio.protocolos import (
 
 def _chave(*partes: str) -> str:
     return "__".join(partes)
+
+
+def _rolar_para_topo(identificador: str) -> None:
+    """O Streamlit não reseta o scroll sozinho entre reruns — ao navegar
+    pra uma seção mais curta que a anterior (com a página rolada pra
+    baixo), o título/indicador de progresso ficavam escondidos acima do
+    topo da tela (achado real, 10/10/2026). `st.markdown`/`unsafe_allow_html`
+    não executa `<script>`, por isso usa `components.html` (roda num
+    iframe de verdade) e acessa o DOM real do app via `window.parent`.
+
+    `identificador` (a etapa atual) precisa variar a cada chamada — com o
+    mesmo HTML de sempre, o Streamlit não recarrega o iframe entre reruns
+    e o script só rodava na primeiríssima vez (achado real: o scroll
+    nunca resetava depois do primeiro clique)."""
+    components.html(
+        f"""
+        <!-- etapa={identificador} -->
+        <script>
+            const doc = window.parent.document;
+            function resetarScroll() {{
+                const principal = doc.querySelector('section[data-testid="stMain"]');
+                if (principal) {{ principal.scrollTop = 0; }}
+            }}
+            resetarScroll();
+            [0, 50, 100, 200, 350, 500].forEach(ms => setTimeout(resetarScroll, ms));
+        </script>
+        """,
+        height=0,
+    )
 
 
 def _obter(chave: str):
@@ -307,7 +338,7 @@ def _reiniciar() -> None:
 # ---------------------------------------------------------------------------
 
 def _passo_selecao_protocolo() -> None:
-    st.markdown("# Avaliação — Sport Labs")
+    st.markdown("# Avaliação Cinética Funcional — Sport Labs")
     st.caption("Escolha o protocolo e o tipo de avaliação para começar.")
 
     with estilo.cartao("protocolo"):
@@ -399,6 +430,10 @@ def _passo_revisao(protocolo: Protocolo) -> None:
 def render() -> None:
     if "etapa" not in st.session_state:
         st.session_state["etapa"] = 0
+    # `time.time()` em vez da etapa: revisitar a mesma seção (Voltar e
+    # Próximo de novo) repetiria o mesmo identificador e o Streamlit não
+    # recarregaria o iframe do script uma segunda vez.
+    _rolar_para_topo(str(time.time()))
 
     if st.session_state["etapa"] == 0 or not st.session_state.get("protocolo_id"):
         _passo_selecao_protocolo()
