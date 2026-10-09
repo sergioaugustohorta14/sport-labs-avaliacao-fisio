@@ -111,7 +111,7 @@ def _tela_login() -> None:
     with st.form("login_form"):
         usuario = st.text_input("Usuário")
         senha = st.text_input("Senha", type="password")
-        entrar = st.form_submit_button("Entrar")
+        entrar = st.form_submit_button("Entrar", width="stretch")
 
     if entrar:
         usuarios = _usuarios_configurados()
