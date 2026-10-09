@@ -84,6 +84,20 @@ def injetar_tema() -> None:
             box-shadow: 0 0 26px {COR_GLOW};
             filter: brightness(1.08);
         }}
+        /* Estado desabilitado precisa parecer MESMO desabilitado — sem
+        isso "Iniciar Avaliação" ficava visualmente idêntico ao estado
+        pronto pra clicar antes de escolher Protocolo/Tipo, e o clique
+        não fazia nada (achado real, 09/10/2026). */
+        .stButton button[kind="primary"]:disabled {{
+            background: {COR_SURFACE} !important;
+            box-shadow: none !important;
+            opacity: 0.55;
+            cursor: not-allowed;
+        }}
+        .stButton button[kind="primary"]:disabled,
+        .stButton button[kind="primary"]:disabled * {{
+            color: {COR_MUTED} !important;
+        }}
 
         /* Segmented control (Protocolo / Tipo de avaliação) — pill bar.
         `width="stretch"` no Python já faz o grupo ocupar 100% da largura;
