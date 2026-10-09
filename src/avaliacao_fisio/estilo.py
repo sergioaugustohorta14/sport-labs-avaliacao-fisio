@@ -84,14 +84,25 @@ def injetar_tema() -> None:
             filter: brightness(1.08);
         }}
 
-        /* Segmented control (Protocolo / Tipo de avaliação) — pill bar. */
+        /* Segmented control (Protocolo / Tipo de avaliação) — pill bar.
+        `width="stretch"` no Python já faz o grupo ocupar 100% da largura;
+        aqui força cada botão a dividir esse espaço em partes iguais
+        (`flex: 1 1 0`) e garante a forma de cápsula + altura confortável,
+        que o CSS nativo do Streamlit (mais específico) sobrescrevia. */
         div[data-testid="stButtonGroup"] {{
-            width: 100%;
+            width: 100% !important;
+        }}
+        div[data-testid="stButtonGroup"] > div {{
+            width: 100% !important;
+            display: flex !important;
         }}
         div[data-testid="stButtonGroup"] button {{
-            background: transparent;
-            border: none;
+            flex: 1 1 0 !important;
+            background: transparent !important;
+            border: none !important;
             border-radius: 999px !important;
+            padding: 0.85rem 1rem !important;
+            font-size: 1rem !important;
             font-weight: 600;
         }}
         div[data-testid="stButtonGroup"] button[data-selected],

@@ -317,6 +317,7 @@ def _passo_selecao_protocolo() -> None:
             options=[PROTOCOLO_MMII.nome, PROTOCOLO_MMSS.nome],
             label_visibility="collapsed",
             key="segmented_protocolo",
+            width="stretch",
         )
 
     with estilo.cartao("tipo"):
@@ -326,6 +327,7 @@ def _passo_selecao_protocolo() -> None:
             options=["Nova avaliação", "Reavaliação"],
             label_visibility="collapsed",
             key="segmented_tipo",
+            width="stretch",
         )
 
     if st.button("Iniciar Avaliação", type="primary", disabled=not (protocolo_opcao and tipo_opcao)):
