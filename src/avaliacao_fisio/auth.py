@@ -84,9 +84,10 @@ def _tela_login() -> None:
             -webkit-box-shadow: 0 0 0 1000px {estilo.COR_SURFACE} inset !important;
             transition: background-color 9999s ease-in-out 0s;
         }}
+        div[data-testid="stFormSubmitButton"] {{ width: 100% !important; }}
         div[data-testid="stFormSubmitButton"] button {{
-            width: 100%; margin-top: 18px; background: {estilo.GRADIENTE_PRIMARIO};
-            border: none; border-radius: 8px; padding: 12px 0; font-weight: 700;
+            width: 100% !important; margin-top: 18px; background: {estilo.GRADIENTE_PRIMARIO};
+            border: none; border-radius: 8px; padding: 12px 0 !important; font-weight: 700;
             letter-spacing: 0.04em; font-size: 14px; box-shadow: 0 0 18px {estilo.COR_GLOW};
         }}
         div[data-testid="stFormSubmitButton"] button,
