@@ -98,15 +98,19 @@ def injetar_tema() -> None:
             color: {COR_TEXTO};
         }}
 
-        /* Botões grandes, alvo de toque confortável num tablet. */
+        /* Botões grandes, alvo de toque confortável num tablet — formato
+        cápsula completa e preenchimento sólido (referência de botão
+        enviada pelo Sergio em 10/10/2026: pill cheio, não retângulo com
+        cantos arredondados nem fundo transparente). */
         .stButton button {{
             width: 100%;
             padding: 0.9rem 1rem;
             font-size: 1.05rem;
             font-weight: 600;
-            border-radius: 10px;
+            border-radius: 999px;
             border: 1px solid {COR_BORDA};
-            background: transparent;
+            background: {COR_SURFACE};
+            box-shadow: 0 0 10px rgba(212, 175, 95, 0.18);
         }}
         /* `*` nos filhos é necessário: a regra genérica de cor de texto
         (span, div, acima) pinta o texto interno do botão (que o Streamlit
@@ -155,7 +159,7 @@ def injetar_tema() -> None:
         }}
         div[data-testid="stButtonGroup"] button {{
             flex: 1 1 0 !important;
-            background: transparent !important;
+            background: {COR_SURFACE} !important;
             border: none !important;
             border-radius: 999px !important;
             padding: 0.85rem 1rem !important;
