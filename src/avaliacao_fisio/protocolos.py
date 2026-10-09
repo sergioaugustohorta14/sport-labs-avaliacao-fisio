@@ -89,7 +89,7 @@ DADOS_PACIENTE = Secao(
     id="dados_paciente",
     titulo="Dados do Paciente",
     campos=(
-        Campo("nome_completo", "Nome completo", "unico_texto"),
+        Campo("nome_completo", "Nome completo", "busca_paciente"),
         Campo("data_nascimento", "Data de nascimento", "data"),
         Campo("idade", "Idade", "unico_numero", unidade="anos"),
         Campo("peso_kg", "Peso", "unico_numero", unidade="kg"),

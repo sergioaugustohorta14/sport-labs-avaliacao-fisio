@@ -56,11 +56,29 @@ def injetar_tema() -> None:
         [data-testid="stCaptionContainer"] {{ color: {COR_MUTED} !important; }}
 
         .stTextInput input, .stNumberInput input,
-        div[data-baseweb="select"] > div {{
+        div[data-baseweb="select"] > div,
+        div[data-testid="stSelectbox"] input {{
             background-color: {COR_SURFACE} !important;
             color: {COR_TEXTO} !important;
             border: 1px solid {COR_BORDA} !important;
             border-radius: 8px;
+        }}
+
+        /* Dropdown do selectbox (ex.: busca de paciente) é renderizado num
+        portal direto em <body>, fora do container principal — por isso
+        não herdava o tema escuro e ficava branco/ilegível (achado real,
+        10/10/2026). Classe confirmada inspecionando o DOM renderizado. */
+        div[data-testid="stSelectboxVirtualDropdown"],
+        div[data-testid="stSelectboxVirtualDropdown"] [role="listbox"] {{
+            background-color: {COR_SURFACE} !important;
+        }}
+        div[data-testid="stSelectboxVirtualDropdown"] [role="option"] {{
+            background-color: {COR_SURFACE} !important;
+            color: {COR_TEXTO} !important;
+        }}
+        div[data-testid="stSelectboxVirtualDropdown"] [role="option"]:hover,
+        div[data-testid="stSelectboxVirtualDropdown"] [role="option"][aria-selected="true"] {{
+            background-color: rgba(212, 175, 95, 0.18) !important;
         }}
 
         /* `st.date_input` não usa <input> nesta versão do Streamlit — é um

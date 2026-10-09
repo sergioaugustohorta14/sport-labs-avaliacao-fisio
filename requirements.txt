@@ -1,6 +1,7 @@
 streamlit>=1.37
 reportlab>=4.2
 tzdata>=2024.1
+requests>=2.31
 
 # Instala o próprio pacote (src/avaliacao_fisio) em modo editável, para que
 # "import avaliacao_fisio" funcione tanto localmente quanto no Streamlit

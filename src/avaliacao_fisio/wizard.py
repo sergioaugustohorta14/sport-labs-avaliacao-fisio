@@ -23,7 +23,7 @@ import time
 import streamlit as st
 import streamlit.components.v1 as components
 
-from avaliacao_fisio import estilo, pdf_avaliacao
+from avaliacao_fisio import estilo, feegow_client, pdf_avaliacao
 from avaliacao_fisio.protocolos import (
     PROTOCOLO_MMII,
     PROTOCOLO_MMSS,
@@ -99,6 +99,23 @@ def _renderizar_campo(secao_id: str, campo: Campo) -> None:
 
     if tipo == "unico_texto":
         valor = st.text_input(campo.rotulo, value=_obter(chave) or "", key=f"w__{chave}")
+        _guardar(chave, valor)
+    elif tipo == "busca_paciente":
+        # Autocomplete com os pacientes já cadastrados no Feegow (achado
+        # real: a API só cobre os ~500 cadastros mais antigos e não filtra
+        # por nome no servidor — por isso busca difusa no cliente, e
+        # `accept_new_options` garante que digitar um nome fora da lista
+        # continua funcionando normalmente, nunca trava o preenchimento).
+        opcoes = list(feegow_client.nomes_pacientes_cache())
+        valor_salvo = _obter(chave)
+        if valor_salvo and valor_salvo not in opcoes:
+            opcoes = [valor_salvo] + opcoes
+        indice = opcoes.index(valor_salvo) if valor_salvo in opcoes else None
+        valor = st.selectbox(
+            campo.rotulo, options=opcoes, index=indice, accept_new_options=True,
+            placeholder="Digite pra buscar o paciente ou digitar o nome",
+            key=f"w__{chave}",
+        )
         _guardar(chave, valor)
     elif tipo == "unico_numero":
         rotulo = f"{campo.rotulo} ({campo.unidade})" if campo.unidade else campo.rotulo
