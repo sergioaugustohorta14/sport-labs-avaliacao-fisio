@@ -21,7 +21,7 @@ import datetime as dt
 
 import streamlit as st
 
-from avaliacao_fisio import pdf_avaliacao
+from avaliacao_fisio import estilo, pdf_avaliacao
 from avaliacao_fisio.protocolos import (
     PROTOCOLO_MMII,
     PROTOCOLO_MMSS,
@@ -307,12 +307,28 @@ def _reiniciar() -> None:
 # ---------------------------------------------------------------------------
 
 def _passo_selecao_protocolo() -> None:
-    st.markdown("## Tablet de Avaliação — Sport Labs")
+    st.markdown("# Avaliação — Sport Labs")
     st.caption("Escolha o protocolo e o tipo de avaliação para começar.")
-    protocolo_opcao = st.radio("Protocolo", options=[PROTOCOLO_MMII.nome, PROTOCOLO_MMSS.nome], index=None)
-    tipo_opcao = st.radio("Tipo de avaliação", options=["Nova avaliação", "Reavaliação"], index=None, horizontal=True)
 
-    if st.button("Começar →", type="primary", disabled=not (protocolo_opcao and tipo_opcao)):
+    with estilo.cartao("protocolo"):
+        st.markdown("**Protocolo**")
+        protocolo_opcao = st.segmented_control(
+            "Protocolo",
+            options=[PROTOCOLO_MMII.nome, PROTOCOLO_MMSS.nome],
+            label_visibility="collapsed",
+            key="segmented_protocolo",
+        )
+
+    with estilo.cartao("tipo"):
+        st.markdown("**Tipo de avaliação**")
+        tipo_opcao = st.segmented_control(
+            "Tipo de avaliação",
+            options=["Nova avaliação", "Reavaliação"],
+            label_visibility="collapsed",
+            key="segmented_tipo",
+        )
+
+    if st.button("Iniciar Avaliação", type="primary", disabled=not (protocolo_opcao and tipo_opcao)):
         protocolo_id = PROTOCOLO_MMII.id if protocolo_opcao == PROTOCOLO_MMII.nome else PROTOCOLO_MMSS.id
         st.session_state["protocolo_id"] = protocolo_id
         st.session_state["tipo_avaliacao"] = tipo_opcao

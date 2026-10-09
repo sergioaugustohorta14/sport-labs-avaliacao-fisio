@@ -1,8 +1,7 @@
-"""Tema visual fixo do Tablet de Avaliação — skin de marca sempre escuro
-(independente do tema claro/escuro do tablet), fonte Inter e botões grandes
-pra toque, no mesmo espírito da tela de login do Painel Feegow
-(`feegow_analytics.reports.auth`) e do tema geral
-(`feegow_analytics.reports.estilo`).
+"""Tema visual do Tablet de Avaliação — identidade "neon" azul/ciano sobre
+fundo navy escuro (decisão de 09/10/2026: visual próprio deste app,
+deliberadamente diferente do cinza "Sport Labs" do Feegow-Analytics).
+Fonte Inter e botões grandes pra toque continuam do desenho original.
 """
 from __future__ import annotations
 
@@ -10,11 +9,14 @@ import streamlit as st
 
 FONTE_GOOGLE_QUERY = "Inter:wght@400;500;600;700"
 
-COR_FUNDO = "#322f33"
-COR_SURFACE = "#1c1a1d"
-COR_TEXTO = "#f5f4f6"
-COR_MUTED = "#9c99a0"
-COR_BORDA = "#5c5960"
+COR_FUNDO = "#121826"
+COR_SURFACE = "#1b2435"
+COR_TEXTO = "#eef2f7"
+COR_MUTED = "#8b96ab"
+COR_BORDA = "rgba(56, 211, 255, 0.35)"
+COR_GLOW = "rgba(56, 211, 255, 0.28)"
+COR_TEXTO_SOBRE_GRADIENTE = "#0b1420"
+GRADIENTE_PRIMARIO = "linear-gradient(90deg, #2f6fff 0%, #22e8e0 100%)"
 
 
 def injetar_tema() -> None:
@@ -35,7 +37,7 @@ def injetar_tema() -> None:
         }}
 
         [data-testid="stAppViewContainer"], [data-testid="stHeader"] {{
-            background: {COR_FUNDO};
+            background: radial-gradient(circle at 50% 0%, #1b2436 0%, #10141f 55%, #0c0f17 100%);
         }}
         [data-testid="stMain"] .block-container {{
             max-width: 52rem; padding-top: 2rem; padding-bottom: 8rem;
@@ -50,7 +52,7 @@ def injetar_tema() -> None:
             background-color: {COR_SURFACE} !important;
             color: {COR_TEXTO} !important;
             border: 1px solid {COR_BORDA} !important;
-            border-radius: 6px;
+            border-radius: 8px;
         }}
 
         /* Botões grandes, alvo de toque confortável num tablet. */
@@ -59,22 +61,59 @@ def injetar_tema() -> None:
             padding: 0.9rem 1rem;
             font-size: 1.05rem;
             font-weight: 600;
-            border-radius: 8px;
+            border-radius: 10px;
             border: 1px solid {COR_BORDA};
+            background: transparent;
         }}
         /* `*` nos filhos é necessário: a regra genérica de cor de texto
         (span, div, acima) pinta o texto interno do botão (que o Streamlit
         envolve num elemento próprio) por cima da cor definida aqui — sem
-        isso o texto escuro ficava invisível num fundo também claro. */
+        isso o texto ficava invisível num fundo também claro. */
         .stButton button[kind="primary"] {{
-            background: {COR_TEXTO}; border: none;
+            background: {GRADIENTE_PRIMARIO};
+            border: none;
+            box-shadow: 0 0 18px {COR_GLOW};
         }}
         .stButton button[kind="primary"],
         .stButton button[kind="primary"] * {{
-            color: {COR_FUNDO} !important;
+            color: {COR_TEXTO_SOBRE_GRADIENTE} !important;
+            font-weight: 700 !important;
         }}
         .stButton button[kind="primary"]:hover {{
-            background: #ffffff;
+            box-shadow: 0 0 26px {COR_GLOW};
+            filter: brightness(1.08);
+        }}
+
+        /* Segmented control (Protocolo / Tipo de avaliação) — pill bar. */
+        div[data-testid="stButtonGroup"] {{
+            width: 100%;
+        }}
+        div[data-testid="stButtonGroup"] button {{
+            background: transparent;
+            border: none;
+            border-radius: 999px !important;
+            font-weight: 600;
+        }}
+        div[data-testid="stButtonGroup"] button[data-selected],
+        div[data-testid="stButtonGroup"] [data-selected] button {{
+            background: {GRADIENTE_PRIMARIO} !important;
+            box-shadow: 0 0 16px {COR_GLOW};
+        }}
+        div[data-testid="stButtonGroup"] button[data-selected] *,
+        div[data-testid="stButtonGroup"] [data-selected] button * {{
+            color: {COR_TEXTO_SOBRE_GRADIENTE} !important;
+            font-weight: 700 !important;
+        }}
+
+        /* Cartões com brilho (ver `cartao()`) — envolvem os seletores da
+        tela inicial, mesmo padrão visual do mockup aprovado em 09/10/2026. */
+        [class*="st-key-cartao_"] {{
+            background: rgba(27, 36, 53, 0.55);
+            border: 1px solid {COR_BORDA};
+            border-radius: 14px;
+            padding: 18px 20px 6px;
+            margin-bottom: 14px;
+            box-shadow: 0 0 22px rgba(56, 211, 255, 0.10);
         }}
 
         .sl-progresso {{
@@ -86,6 +125,14 @@ def injetar_tema() -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+def cartao(key: str):
+    """Container com o cartão de brilho ciano usado na tela inicial
+    (Protocolo / Tipo de avaliação) — `key` vira a classe `st-key-cartao_<key>`
+    que a regra em `injetar_tema()` estiliza. Ver padrão equivalente em
+    `feegow_analytics.reports.estilo.container_filtros()`."""
+    return st.container(key=f"cartao_{key}")
 
 
 def cabecalho_pagina(logo_base64: str | None, titulo: str, subtitulo: str | None = None) -> None:

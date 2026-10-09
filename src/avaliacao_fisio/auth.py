@@ -51,7 +51,9 @@ def _tela_login() -> None:
         f"""
         <style>
         html, body {{ color-scheme: dark; }}
-        [data-testid="stAppViewContainer"], [data-testid="stHeader"] {{ background: {estilo.COR_FUNDO}; }}
+        [data-testid="stAppViewContainer"], [data-testid="stHeader"] {{
+            background: radial-gradient(circle at 50% 0%, #1b2436 0%, #10141f 55%, #0c0f17 100%);
+        }}
         [data-testid="stMain"] .block-container {{ padding-top: 4rem; max-width: 30rem; }}
         #MainMenu, footer {{ visibility: hidden; }}
 
@@ -83,15 +85,15 @@ def _tela_login() -> None:
             transition: background-color 9999s ease-in-out 0s;
         }}
         div[data-testid="stFormSubmitButton"] button {{
-            width: 100%; margin-top: 18px; background: {estilo.COR_TEXTO};
-            border: none; border-radius: 6px; padding: 12px 0; font-weight: 600;
-            letter-spacing: 0.08em; text-transform: uppercase; font-size: 13px;
+            width: 100%; margin-top: 18px; background: {estilo.GRADIENTE_PRIMARIO};
+            border: none; border-radius: 8px; padding: 12px 0; font-weight: 700;
+            letter-spacing: 0.04em; font-size: 14px; box-shadow: 0 0 18px {estilo.COR_GLOW};
         }}
         div[data-testid="stFormSubmitButton"] button,
         div[data-testid="stFormSubmitButton"] button * {{
-            color: {estilo.COR_FUNDO} !important;
+            color: {estilo.COR_TEXTO_SOBRE_GRADIENTE} !important;
         }}
-        div[data-testid="stFormSubmitButton"] button:hover {{ background: #ffffff; }}
+        div[data-testid="stFormSubmitButton"] button:hover {{ filter: brightness(1.08); }}
         div[data-testid="stAlert"] {{ background: #46333a; color: #f3d9de; }}
         </style>
         """,
