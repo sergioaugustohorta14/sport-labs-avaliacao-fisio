@@ -57,11 +57,17 @@ def injetar_tema() -> None:
 
         .stTextInput input, .stNumberInput input,
         div[data-baseweb="select"] > div,
-        div[data-testid="stSelectbox"] input {{
+        div[data-testid="stSelectbox"] input,
+        [data-testid="stFileUploaderDropzone"] {{
             background-color: {COR_SURFACE} !important;
             color: {COR_TEXTO} !important;
             border: 1px solid {COR_BORDA} !important;
             border-radius: 8px;
+        }}
+        [data-testid="stFileUploaderDropzone"] button {{
+            background-color: {COR_FUNDO} !important;
+            color: {COR_TEXTO} !important;
+            border: 1px solid {COR_BORDA} !important;
         }}
 
         /* Dropdown do selectbox (ex.: busca de paciente) é renderizado num
@@ -114,6 +120,24 @@ def injetar_tema() -> None:
         [data-testid="stSidebar"] span, [data-testid="stSidebar"] div,
         [data-testid="stSidebar"] label {{
             color: {COR_TEXTO};
+        }}
+        /* A seta nativa de colapsar a sidebar só aparece com `:hover` do
+        mouse (`visibility: hidden` por padrão) — num tablet sem mouse
+        ela fica invisível/inacessível (achado real, 13/10/2026, pedido
+        da equipe de fisioterapeutas). Força sempre visível. */
+        /* Estrutura inconsistente entre os dois controles nativos: no de
+        colapsar, o testid fica num wrapper (o <button> real é um filho);
+        no de reabrir, o testid está direto no <button> — por isso as duas
+        formas de seletor, uma não cobria a outra (achado real). A cor do
+        ícone também vinha escura (pensada pra fundo claro do Streamlit),
+        quase invisível no nosso tema — força clara também. */
+        [data-testid="stSidebarCollapseButton"] button,
+        button[data-testid="stExpandSidebarButton"] {{
+            visibility: visible !important;
+        }}
+        [data-testid="stSidebarCollapseButton"] button [data-testid="stIconMaterial"],
+        button[data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"] {{
+            color: {COR_TEXTO} !important;
         }}
 
         /* Botões grandes, alvo de toque confortável num tablet — formato

@@ -18,6 +18,7 @@ do Streamlit, que `pdf_avaliacao.gerar()` consome.
 from __future__ import annotations
 
 import datetime as dt
+import html
 import time
 
 import streamlit as st
@@ -74,12 +75,61 @@ def _obter(chave: str):
     return st.session_state.get("respostas", {}).get(chave)
 
 
-def _guardar(chave: str, valor) -> None:
-    st.session_state.setdefault("respostas", {})[chave] = valor
+def _guardar(chave: str, valor, avancar: bool = False) -> None:
+    """`avancar=True` marca que esse campo é do tipo "clique único" (rádio/
+    segmented/selectbox que já re-executa na hora) — se o valor mudou de
+    verdade, sinaliza pra `render()` rolar a tela até o próximo campo
+    (pedido da equipe de fisioterapeutas, 13/10/2026). Não usar em campos
+    de texto/número (atrapalharia digitar)."""
+    respostas = st.session_state.setdefault("respostas", {})
+    if avancar and valor is not None and respostas.get(chave) != valor:
+        st.session_state["_avancar_scroll"] = True
+    respostas[chave] = valor
 
 
 def _indice(opcoes: list[str], atual) -> int | None:
     return opcoes.index(atual) if atual in opcoes else None
+
+
+def _calcular_idade(data_nascimento) -> int | None:
+    if not hasattr(data_nascimento, "year"):
+        return None
+    hoje = dt.date.today()
+    idade = hoje.year - data_nascimento.year
+    if (hoje.month, hoje.day) < (data_nascimento.month, data_nascimento.day):
+        idade -= 1
+    return idade
+
+
+def _formatar_tempo(minutos, segundos) -> str | None:
+    if minutos is None and segundos is None:
+        return None
+    return f"{int(minutos or 0)}'{int(segundos or 0):02d}\""
+
+
+def _rolar_offset(identificador: str, pixels: int = 220) -> None:
+    """Rola a tela um pouco pra baixo depois de marcar um campo de
+    clique único (rádio/segmented/selectbox) — pedido da equipe de
+    fisioterapeutas pra não precisar rolar manualmente até o próximo
+    campo a cada resposta. É uma aproximação por deslocamento fixo em
+    pixels, não mira o campo exato seguinte."""
+    components.html(
+        f"""
+        <!-- avancar={identificador} -->
+        <script>
+            const doc = window.parent.document;
+            const principal = doc.querySelector('section[data-testid="stMain"]');
+            // `scrollBy` é incremental (não idempotente como o reset pro
+            // topo) — chamar mais de uma vez soma o deslocamento em vez de
+            // só tentar de novo. Uma chamada só, depois de um instante pro
+            // layout da seção assentar.
+            setTimeout(() => {{
+                if (principal) {{ principal.scrollBy({{top: {pixels}, behavior: 'smooth'}}); }}
+            }}, 80);
+        </script>
+        """,
+        height=0,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -93,20 +143,50 @@ def renderizar_secao(secao: Secao) -> None:
         st.divider()
 
 
+def _widget_tempo(chave_base: str, visivel: bool = True) -> None:
+    """Dois `number_input` (minutos, segundos) — usado por
+    "bilateral_tempo"/"unico_tempo" (ex.: prancha lateral em min/seg em
+    vez de só segundos, pedido da equipe de fisioterapeutas)."""
+    chave_min, chave_seg = f"{chave_base}_min", f"{chave_base}_seg"
+    visibilidade = "visible" if visivel else "collapsed"
+    col_min, col_seg = st.columns(2)
+    with col_min:
+        valor_min = st.number_input("min", value=_obter(chave_min), min_value=0, step=1, key=f"w__{chave_min}", label_visibility=visibilidade)
+    with col_seg:
+        valor_seg = st.number_input("seg", value=_obter(chave_seg), min_value=0, max_value=59, step=1, key=f"w__{chave_seg}", label_visibility=visibilidade)
+    _guardar(chave_min, valor_min)
+    _guardar(chave_seg, valor_seg)
+
+
 def _renderizar_campo(secao_id: str, campo: Campo) -> None:
     tipo = campo.tipo
     chave = _chave(secao_id, campo.id)
 
     if tipo == "unico_texto":
-        valor = st.text_input(campo.rotulo, value=_obter(chave) or "", key=f"w__{chave}")
+        valor = st.text_input(campo.rotulo, value=_obter(chave) or "", key=f"w__{chave}", help=campo.ajuda)
         _guardar(chave, valor)
+    elif tipo == "idade_calculada":
+        # Sem widget — deriva de "data_nascimento" (campo anterior, mesma
+        # seção) e grava o resultado como se fosse um campo normal, pra
+        # revisão/PDF não precisarem de tratamento especial.
+        data_nascimento = _obter(_chave(secao_id, "data_nascimento"))
+        idade = _calcular_idade(data_nascimento)
+        if idade is not None:
+            st.caption(f"{campo.rotulo}: {idade} {campo.unidade or ''}".strip())
+        else:
+            st.caption(f"{campo.rotulo}: preencha a data de nascimento acima")
+        _guardar(chave, idade)
     elif tipo == "busca_paciente":
         # Autocomplete com os pacientes já cadastrados no Feegow (achado
         # real: a API só cobre os ~500 cadastros mais antigos e não filtra
         # por nome no servidor — por isso busca difusa no cliente, e
         # `accept_new_options` garante que digitar um nome fora da lista
         # continua funcionando normalmente, nunca trava o preenchimento).
-        opcoes = list(feegow_client.nomes_pacientes_cache())
+        # O rótulo mostra o ID do Feegow entre parênteses (achado real:
+        # dois cadastros com o mesmo nome, um ativo e um inativo) — ao
+        # selecionar um conhecido, autopreenche a data de nascimento.
+        mapa = feegow_client.pacientes_mapa_cache()
+        opcoes = list(mapa.keys())
         valor_salvo = _obter(chave)
         if valor_salvo and valor_salvo not in opcoes:
             opcoes = [valor_salvo] + opcoes
@@ -116,48 +196,103 @@ def _renderizar_campo(secao_id: str, campo: Campo) -> None:
             placeholder="Digite pra buscar o paciente ou digitar o nome",
             key=f"w__{chave}",
         )
+        if valor != valor_salvo:
+            registro = mapa.get(valor)
+            if registro and registro.get("nascimento"):
+                # Não basta gravar em `respostas` — o widget de data_nascimento
+                # já tem a própria `key` no session_state (é desenhado logo a
+                # seguir, na mesma seção) e o Streamlit ignora o `value=` de um
+                # widget cuja key já existe. Precisa escrever direto na key
+                # do widget pra ele realmente mostrar o valor novo.
+                chave_nasc = _chave(secao_id, "data_nascimento")
+                _guardar(chave_nasc, registro["nascimento"])
+                st.session_state[f"w__{chave_nasc}"] = registro["nascimento"]
         _guardar(chave, valor)
     elif tipo == "unico_numero":
         rotulo = f"{campo.rotulo} ({campo.unidade})" if campo.unidade else campo.rotulo
-        valor = st.number_input(rotulo, value=_obter(chave), step=0.1, format="%.1f", key=f"w__{chave}")
+        passo = 10 ** -campo.casas_decimais
+        valor = st.number_input(rotulo, value=_obter(chave), step=passo, format=f"%.{campo.casas_decimais}f", key=f"w__{chave}", help=campo.ajuda)
         _guardar(chave, valor)
+    elif tipo in ("bilateral_tempo", "unico_tempo"):
+        st.markdown(f"**{campo.rotulo}**")
+        if campo.ajuda:
+            st.caption(campo.ajuda)
+        if tipo == "unico_tempo":
+            _widget_tempo(chave)
+        else:
+            col_d, col_e = st.columns(2)
+            with col_d:
+                st.caption("Direito")
+                _widget_tempo(_chave(secao_id, campo.id, "D"))
+            with col_e:
+                st.caption("Esquerdo")
+                _widget_tempo(_chave(secao_id, campo.id, "E"))
+    elif tipo == "foto_unica":
+        arquivo = st.camera_input(campo.rotulo, key=f"w__{chave}", help=campo.ajuda)
+        if arquivo is not None:
+            _guardar(chave, arquivo.getvalue())
+        elif _obter(chave):
+            st.image(_obter(chave), width=240, caption="Foto já capturada")
+        chave_desc = f"{chave}__desc"
+        valor_desc = st.text_input("Legenda da foto", value=_obter(chave_desc) or "", key=f"w__{chave_desc}")
+        _guardar(chave_desc, valor_desc)
+    elif tipo == "video_upload":
+        arquivo = st.file_uploader(campo.rotulo, type=["mp4", "mov", "avi", "mkv"], key=f"w__{chave}", help=campo.ajuda)
+        if arquivo is not None:
+            _guardar(chave, {"nome": arquivo.name, "bytes": arquivo.getvalue()})
+        elif _obter(chave):
+            st.caption(f"Vídeo já anexado nesta sessão: {_obter(chave)['nome']}")
     elif tipo == "data":
-        valor = st.date_input(campo.rotulo, value=_obter(chave), key=f"w__{chave}", format="DD/MM/YYYY")
+        # Se a key já existe (widget já desenhado antes, ou acabou de ser
+        # forçada pelo autopreenchimento da busca de paciente), não passa
+        # `value=` — o Streamlit avisa (warning) quando os dois são usados
+        # juntos no mesmo render, mesmo funcionando.
+        chave_widget = f"w__{chave}"
+        if chave_widget in st.session_state:
+            valor = st.date_input(campo.rotulo, key=chave_widget, format="DD/MM/YYYY", help=campo.ajuda)
+        else:
+            valor = st.date_input(campo.rotulo, value=_obter(chave), key=chave_widget, format="DD/MM/YYYY", help=campo.ajuda)
         _guardar(chave, valor)
     elif tipo == "lado_unico":
         opcoes = ["Direito", "Esquerdo"]
-        valor = st.radio(campo.rotulo, options=opcoes, index=_indice(opcoes, _obter(chave)), key=f"w__{chave}", horizontal=True)
-        _guardar(chave, valor)
+        valor = st.radio(campo.rotulo, options=opcoes, index=_indice(opcoes, _obter(chave)), key=f"w__{chave}", horizontal=True, help=campo.ajuda)
+        _guardar(chave, valor, avancar=True)
     elif tipo == "opcoes":
         opcoes = list(campo.opcoes or ())
-        valor = st.radio(campo.rotulo, options=opcoes, index=_indice(opcoes, _obter(chave)), key=f"w__{chave}", horizontal=True)
-        _guardar(chave, valor)
+        valor = st.radio(campo.rotulo, options=opcoes, index=_indice(opcoes, _obter(chave)), key=f"w__{chave}", horizontal=True, help=campo.ajuda)
+        _guardar(chave, valor, avancar=True)
     elif tipo in ("bilateral_numero", "bilateral_sinal", "bilateral_score"):
         rotulo = f"{campo.rotulo} ({campo.unidade})" if campo.unidade else campo.rotulo
         st.markdown(f"**{rotulo}**")
+        if campo.ajuda:
+            st.caption(campo.ajuda)
         col_d, col_e = st.columns(2)
         chave_d, chave_e = _chave(secao_id, campo.id, "D"), _chave(secao_id, campo.id, "E")
 
         if tipo == "bilateral_numero":
+            passo = 10 ** -campo.casas_decimais
             with col_d:
-                valor_d = st.number_input("Direito", value=_obter(chave_d), step=0.1, format="%.1f", key=f"w__{chave_d}")
+                valor_d = st.number_input("Direito", value=_obter(chave_d), step=passo, format=f"%.{campo.casas_decimais}f", key=f"w__{chave_d}")
             with col_e:
-                valor_e = st.number_input("Esquerdo", value=_obter(chave_e), step=0.1, format="%.1f", key=f"w__{chave_e}")
+                valor_e = st.number_input("Esquerdo", value=_obter(chave_e), step=passo, format=f"%.{campo.casas_decimais}f", key=f"w__{chave_e}")
+            avancar = False
         elif tipo == "bilateral_sinal":
             opcoes = ["+", "-"]
             with col_d:
                 valor_d = st.radio("Direito", options=opcoes, index=_indice(opcoes, _obter(chave_d)), key=f"w__{chave_d}", horizontal=True)
             with col_e:
                 valor_e = st.radio("Esquerdo", options=opcoes, index=_indice(opcoes, _obter(chave_e)), key=f"w__{chave_e}", horizontal=True)
+            avancar = True
         else:  # bilateral_score
             opcoes = ["1", "2", "3"]
             with col_d:
                 valor_d = st.radio("Direito", options=opcoes, index=_indice(opcoes, _obter(chave_d)), key=f"w__{chave_d}", horizontal=True)
             with col_e:
                 valor_e = st.radio("Esquerdo", options=opcoes, index=_indice(opcoes, _obter(chave_e)), key=f"w__{chave_e}", horizontal=True)
+            avancar = True
 
-        _guardar(chave_d, valor_d)
-        _guardar(chave_e, valor_e)
+        _guardar(chave_d, valor_d, avancar=avancar)
+        _guardar(chave_e, valor_e, avancar=avancar)
 
         if campo.observacao:
             chave_obs = _chave(secao_id, campo.id, "obs")
@@ -173,7 +308,7 @@ def renderizar_secao_repetivel(secao: SecaoRepetivel) -> None:
     if secao.tem_toggle_realizado:
         opcoes = ["Sim", "Não"]
         valor = st.radio("Realizado?", options=opcoes, index=_indice(opcoes, _obter(chave_realizado)), key=f"w__{chave_realizado}", horizontal=True)
-        _guardar(chave_realizado, valor)
+        _guardar(chave_realizado, valor, avancar=True)
         if valor == "Não":
             return
 
@@ -241,8 +376,8 @@ def renderizar_secao_dor(secao: SecaoDor) -> None:
             valor_lado = st.selectbox("Lado", options=opcoes_lado, index=_indice(opcoes_lado, _obter(chave_lado)), key=f"w__{chave_lado}", label_visibility=visibilidade)
         with col3:
             valor_intensidade = st.slider("Intensidade", min_value=0, max_value=10, value=_obter(chave_intensidade) or 0, key=f"w__{chave_intensidade}", label_visibility=visibilidade)
-        _guardar(chave_regiao, valor_regiao)
-        _guardar(chave_lado, valor_lado)
+        _guardar(chave_regiao, valor_regiao, avancar=True)
+        _guardar(chave_lado, valor_lado, avancar=True)
         _guardar(chave_intensidade, valor_intensidade)
 
     col_add, col_rem = st.columns(2)
@@ -271,6 +406,7 @@ def renderizar_secao_fotos(secao: SecaoFotos) -> None:
 
     for i in range(n_linhas):
         chave_descricao = _chave(secao.id, f"linha{i}", "descricao")
+        chave_observacao = _chave(secao.id, f"linha{i}", "observacao")
         chave_foto = _chave(secao.id, f"linha{i}", "foto")
 
         valor_descricao = st.text_input(
@@ -287,6 +423,11 @@ def renderizar_secao_fotos(secao: SecaoFotos) -> None:
             # afeta qualquer widget não desenhado numa execução) — mostra
             # a foto já salva em `respostas` como substituta.
             st.image(_obter(chave_foto), width=240, caption="Foto já capturada")
+
+        valor_observacao = st.text_area(
+            f"Observação da foto {i + 1}", value=_obter(chave_observacao) or "", key=f"w__{chave_observacao}", height=80,
+        )
+        _guardar(chave_observacao, valor_observacao)
         st.divider()
 
     col_add, col_rem = st.columns(2)
@@ -299,6 +440,7 @@ def renderizar_secao_fotos(secao: SecaoFotos) -> None:
             ultima = n_linhas - 1
             respostas = st.session_state.get("respostas", {})
             respostas.pop(_chave(secao.id, f"linha{ultima}", "descricao"), None)
+            respostas.pop(_chave(secao.id, f"linha{ultima}", "observacao"), None)
             respostas.pop(_chave(secao.id, f"linha{ultima}", "foto"), None)
             st.session_state[chave_n] -= 1
             st.rerun()
@@ -310,6 +452,20 @@ def renderizar_secao_fotos(secao: SecaoFotos) -> None:
 
 def _ler_campo(secao_id: str, campo: Campo):
     respostas = st.session_state.get("respostas", {})
+    chave = _chave(secao_id, campo.id)
+
+    if campo.tipo == "bilateral_tempo":
+        chave_d, chave_e = _chave(secao_id, campo.id, "D"), _chave(secao_id, campo.id, "E")
+        return {
+            "D": _formatar_tempo(respostas.get(f"{chave_d}_min"), respostas.get(f"{chave_d}_seg")),
+            "E": _formatar_tempo(respostas.get(f"{chave_e}_min"), respostas.get(f"{chave_e}_seg")),
+        }
+    if campo.tipo == "unico_tempo":
+        return _formatar_tempo(respostas.get(f"{chave}_min"), respostas.get(f"{chave}_seg"))
+    if campo.tipo == "foto_unica":
+        return {"foto_bytes": respostas.get(chave), "descricao": respostas.get(f"{chave}__desc")}
+    if campo.tipo == "video_upload":
+        return respostas.get(chave)
     if campo.tipo in ("bilateral_numero", "bilateral_sinal", "bilateral_score"):
         valor = {
             "D": respostas.get(_chave(secao_id, campo.id, "D")),
@@ -318,7 +474,7 @@ def _ler_campo(secao_id: str, campo: Campo):
         if campo.observacao:
             valor["obs"] = respostas.get(_chave(secao_id, campo.id, "obs"))
         return valor
-    return respostas.get(_chave(secao_id, campo.id))
+    return respostas.get(chave)
 
 
 def coletar_respostas(protocolo: Protocolo) -> dict:
@@ -369,6 +525,7 @@ def coletar_respostas(protocolo: Protocolo) -> dict:
                 if foto_bytes:
                     fotos.append({
                         "descricao": respostas.get(_chave(secao.id, f"linha{i}", "descricao")),
+                        "observacao": respostas.get(_chave(secao.id, f"linha{i}", "observacao")),
                         "foto_bytes": foto_bytes,
                     })
             dados["secoes"].append({
@@ -385,17 +542,58 @@ def coletar_respostas(protocolo: Protocolo) -> dict:
     return dados
 
 
+def _valor_ausente_html() -> str:
+    return f'<span style="color:{estilo.COR_ACENTO};font-style:italic;">Não preenchido</span>'
+
+
 def _formatar_valor(valor) -> str:
+    """Pra tela de Revisão (não o PDF) — pedido da equipe de
+    fisioterapeutas (13/10/2026): sem travessão, ausência de informação
+    em dourado em vez de "—". Valor de texto livre passa por
+    `html.escape` antes de entrar no HTML (segurança)."""
     if valor is None or valor == "":
-        return "—"
+        return _valor_ausente_html()
     if isinstance(valor, dict):
-        d = valor.get("D")
-        e = valor.get("E")
-        texto = f"D: {d if d not in (None, '') else '—'} · E: {e if e not in (None, '') else '—'}"
+        d, e = valor.get("D"), valor.get("E")
+        d_html = html.escape(str(d)) if d not in (None, "") else _valor_ausente_html()
+        e_html = html.escape(str(e)) if e not in (None, "") else _valor_ausente_html()
+        texto = f"D: {d_html} · E: {e_html}"
         if valor.get("obs"):
-            texto += f" ({valor['obs']})"
+            texto += f" ({html.escape(str(valor['obs']))})"
         return texto
-    return str(valor)
+    return html.escape(str(valor))
+
+
+def _barra_assimetria(d, e) -> str | None:
+    """Barra com gradiente verde→amarelo→vermelho + seta indicando a
+    % de assimetria entre os lados D/E — mesma fórmula usada pela
+    clínica (abaixo de 10% baixa chance de lesão, 10–20% média, acima de
+    20% alta), colada pelo Sergio em 13/10/2026. Só aparece na tela de
+    Revisão, quando os dois lados têm valor numérico preenchido."""
+    if not isinstance(d, (int, float)) or not isinstance(e, (int, float)):
+        return None
+    maior = max(abs(d), abs(e))
+    if maior == 0:
+        return None
+    assimetria = abs(d - e) / maior * 100
+    posicao = min(assimetria, 40) / 40 * 100
+    if assimetria < 10:
+        risco = "baixa chance de lesão"
+    elif assimetria < 20:
+        risco = "média chance de lesão"
+    else:
+        risco = "alta chance de lesão"
+    return f"""
+    <div style="margin:2px 0 12px; max-width:320px;">
+        <div style="position:relative; height:10px; border-radius:6px; margin-top:14px;
+                    background:linear-gradient(90deg, #2e7d32 0%, #2e7d32 25%, {estilo.COR_ACENTO} 50%, #c0392b 100%);">
+            <div style="position:absolute; left:calc({posicao:.1f}% - 7px); top:-14px; font-size:13px;">▼</div>
+        </div>
+        <div style="font-size:0.75rem; color:{estilo.COR_MUTED}; margin-top:2px;">
+            Assimetria: {assimetria:.1f}% — {risco}
+        </div>
+    </div>
+    """
 
 
 def _nome_arquivo(dados: dict, nome_paciente: str) -> str:
@@ -456,7 +654,23 @@ def _passo_revisao(protocolo: Protocolo) -> None:
         with st.expander(secao_saida["titulo"]):
             if secao_saida["tipo"] == "secao":
                 for campo in secao_saida["definicao"].campos:
-                    st.write(f"**{campo.rotulo}:** {_formatar_valor(secao_saida['campos'][campo.id])}")
+                    valor = secao_saida["campos"][campo.id]
+                    if campo.tipo == "foto_unica":
+                        st.markdown(f"**{campo.rotulo}**")
+                        if valor.get("foto_bytes"):
+                            st.image(valor["foto_bytes"], width=200, caption=valor.get("descricao") or None)
+                        else:
+                            st.markdown(_valor_ausente_html(), unsafe_allow_html=True)
+                        continue
+                    if campo.tipo == "video_upload":
+                        texto_video = f"anexado nesta sessão — {html.escape(valor['nome'])}" if valor else _valor_ausente_html()
+                        st.markdown(f"**{campo.rotulo}:** {texto_video}", unsafe_allow_html=True)
+                        continue
+                    st.markdown(f"**{campo.rotulo}:** {_formatar_valor(valor)}", unsafe_allow_html=True)
+                    if campo.tipo == "bilateral_numero" and isinstance(valor, dict):
+                        barra = _barra_assimetria(valor.get("D"), valor.get("E"))
+                        if barra:
+                            st.markdown(barra, unsafe_allow_html=True)
             elif secao_saida["tipo"] == "repetivel":
                 if secao_saida["realizado"] == "Não":
                     st.write("Não realizado.")
@@ -477,6 +691,8 @@ def _passo_revisao(protocolo: Protocolo) -> None:
                 if secao_saida["fotos"]:
                     for foto in secao_saida["fotos"]:
                         st.image(foto["foto_bytes"], width=160, caption=foto.get("descricao") or None)
+                        if foto.get("observacao"):
+                            st.caption(foto["observacao"])
                 else:
                     st.write("Nenhuma foto registrada.")
 
@@ -513,18 +729,26 @@ def _passo_revisao(protocolo: Protocolo) -> None:
 def render() -> None:
     if "etapa" not in st.session_state:
         st.session_state["etapa"] = 0
-    # `time.time()` em vez da etapa: revisitar a mesma seção (Voltar e
-    # Próximo de novo) repetiria o mesmo identificador e o Streamlit não
-    # recarregaria o iframe do script uma segunda vez.
-    _rolar_para_topo(str(time.time()))
+    etapa = st.session_state["etapa"]
 
-    if st.session_state["etapa"] == 0 or not st.session_state.get("protocolo_id"):
+    # Achado real (13/10/2026): rolar pro topo em TODO rerun (não só ao
+    # trocar de seção) fazia a tela subir sozinha a cada campo
+    # preenchido — o usuário tinha que rolar de novo pra achar onde
+    # estava. Agora só rola quando a etapa muda de verdade.
+    mudou_de_etapa = st.session_state.get("_ultima_etapa_rolada") != etapa
+    if mudou_de_etapa:
+        st.session_state["_ultima_etapa_rolada"] = etapa
+        # `time.time()` pra garantir conteúdo único mesmo revisitando a
+        # mesma etapa (Voltar e Próximo de novo) — sem isso o Streamlit
+        # não recarrega o iframe do script e ele só roda uma vez.
+        _rolar_para_topo(f"{etapa}_{time.time()}")
+
+    if etapa == 0 or not st.session_state.get("protocolo_id"):
         _passo_selecao_protocolo()
         return
 
     protocolo = PROTOCOLOS[st.session_state["protocolo_id"]]
     total_passos = len(protocolo.secoes)
-    etapa = st.session_state["etapa"]
 
     if etapa > total_passos:
         _passo_revisao(protocolo)
@@ -541,6 +765,13 @@ def render() -> None:
         renderizar_secao_fotos(secao)
     else:
         renderizar_secao(secao)
+
+    # Pedido da equipe de fisioterapeutas: ao marcar um campo de clique
+    # único (rádio/segmented/selectbox), rolar um pouco pra baixo sozinho
+    # — só dispara se NÃO acabamos de trocar de seção (senão brigaria com
+    # o scroll-pro-topo acima).
+    if not mudou_de_etapa and st.session_state.pop("_avancar_scroll", False):
+        _rolar_offset(str(time.time()))
 
     st.divider()
     col_voltar, col_proximo = st.columns(2)

@@ -18,9 +18,17 @@ cliente (`st.selectbox` com busca difusa). Pacientes fora desses ~500
 (a clínica já passou desse total) não aparecem na sugestão — o campo
 aceita digitação livre nesse caso (`accept_new_options=True`), nunca
 bloqueia o preenchimento.
+
+Achado de 13/10/2026 (pedido da equipe de fisioterapeutas): dois
+pacientes podem ter o MESMO nome (ex.: um cadastro ativo e um inativo
+antigo) — por isso o rótulo mostrado inclui o ID do Feegow entre
+parênteses, pra desambiguar. O ID também permite autopreencher a data de
+nascimento (já vem no bulk de `/patient/list`, campo `nascimento`,
+formato `AAAA-MM-DD`) sem precisar de uma chamada extra à API.
 """
 from __future__ import annotations
 
+import datetime as dt
 import os
 from typing import Any
 
@@ -45,10 +53,13 @@ def _base_url() -> str:
     return _config("FEEGOW_API_BASE_URL", "https://api.feegow.com/v1/api").rstrip("/")
 
 
+@st.cache_data(ttl=86400, show_spinner=False)
 def _listar_pacientes_bruto() -> list[dict[str, Any]]:
     """GET /patient/list — nunca levanta exceção pra quem chama (se a API
     falhar ou o token não estiver configurado, devolve lista vazia e o
-    campo de busca degrada pra digitação livre, sem travar o wizard)."""
+    campo de busca degrada pra digitação livre, sem travar o wizard).
+    Cacheado aqui (não só na função derivada) pra qualquer consumidor
+    futuro reaproveitar a mesma busca sem duplicar a chamada à API."""
     token = _token()
     if not token:
         return []
@@ -69,19 +80,30 @@ def _listar_pacientes_bruto() -> list[dict[str, Any]]:
         return []
 
 
+def _parse_data(valor: str | None) -> dt.date | None:
+    if not valor:
+        return None
+    try:
+        return dt.date.fromisoformat(valor[:10])
+    except (ValueError, TypeError):
+        return None
+
+
 @st.cache_data(ttl=86400, show_spinner=False)
-def nomes_pacientes_cache() -> list[str]:
-    """Nomes únicos dos pacientes conhecidos (dos ~500 que `patient/list`
-    devolve), ordenados — cacheado 24h, mesmo TTL usado pras listas de
-    opções do Feegow-Analytics (opcoes.py), que raramente mudam."""
+def pacientes_mapa_cache() -> dict[str, dict[str, Any]]:
+    """{"Nome (ID 1234)": {"patient_id": 1234, "nascimento": date|None}} —
+    o ID no rótulo desambigua pacientes com o mesmo nome (achado real:
+    dois cadastros "WARLEI CANTARERO", um ativo e um inativo, IDs
+    diferentes). Ordenado por nome. Cacheado 24h."""
     pacientes = _listar_pacientes_bruto()
-    nomes: list[str] = []
-    vistos: set[str] = set()
+    mapa: dict[str, dict[str, Any]] = {}
     for p in pacientes:
         if not isinstance(p, dict):
             continue
         nome = (p.get("nome") or p.get("nome_social") or "").strip()
-        if nome and nome not in vistos:
-            nomes.append(nome)
-            vistos.add(nome)
-    return sorted(nomes)
+        patient_id = p.get("patient_id")
+        if not nome or patient_id is None:
+            continue
+        rotulo = f"{nome} (ID {patient_id})"
+        mapa[rotulo] = {"patient_id": patient_id, "nascimento": _parse_data(p.get("nascimento"))}
+    return dict(sorted(mapa.items()))

@@ -18,11 +18,22 @@ class Campo:
 
     `tipo` define o widget no wizard e o formato da tabela no PDF:
     - "unico_texto" / "unico_numero" / "data" / "booleano": um valor só.
+    - "idade_calculada": sem widget — deriva de `data_nascimento` (mesma
+      seção, campo anterior) e fica só exibida.
     - "lado_unico": escolha D OU E (ex.: membro dominante).
+    - "busca_paciente": autocomplete sobre o cadastro do Feegow.
     - "bilateral_numero": valor numérico pro lado D e pro lado E.
     - "bilateral_sinal": resultado +/- pro lado D e pro lado E (ex.: Thomas).
     - "bilateral_score": score 1 a 3 pro lado D e pro lado E.
+    - "bilateral_tempo" / "unico_tempo": minutos+segundos (ex.: prancha).
+    - "foto_unica": uma foto (câmera) + legenda, não repetível.
+    - "video_upload": upload de vídeo já gravado (não entra no PDF).
     - "opcoes": escolha única entre `opcoes`.
+
+    `ajuda`, se definido, vira o tooltip "?" nativo do Streamlit (`help=`).
+    `casas_decimais` só se aplica a "unico_numero"/"bilateral_numero"
+    (default 1; usar 2 pra medidas que precisam de mais precisão, ex.
+    altura em metros).
     """
 
     id: str
@@ -31,6 +42,8 @@ class Campo:
     unidade: str | None = None
     observacao: bool = False
     opcoes: tuple[str, ...] | None = None
+    ajuda: str | None = None
+    casas_decimais: int = 1
 
 
 @dataclass(frozen=True)
@@ -91,9 +104,9 @@ DADOS_PACIENTE = Secao(
     campos=(
         Campo("nome_completo", "Nome completo", "busca_paciente"),
         Campo("data_nascimento", "Data de nascimento", "data"),
-        Campo("idade", "Idade", "unico_numero", unidade="anos"),
+        Campo("idade", "Idade", "idade_calculada", unidade="anos"),
         Campo("peso_kg", "Peso", "unico_numero", unidade="kg"),
-        Campo("altura_m", "Altura", "unico_numero", unidade="m"),
+        Campo("altura_m", "Altura", "unico_numero", unidade="m", casas_decimais=2),
         Campo("membro_dominante", "Membro dominante", "lado_unico"),
         Campo("esporte_modalidade", "Esporte / modalidade", "unico_texto"),
         Campo("data_lesao", "Data da lesão", "data"),
@@ -152,9 +165,18 @@ _MMII_MOBILIDADE = Secao(
     id="mmii_mobilidade",
     titulo="Mobilidade e Flexibilidade",
     campos=(
-        Campo("flexibilidade_isquiotibiais", "Flexibilidade de isquiotibiais", "bilateral_numero", unidade="°"),
-        Campo("rigidez_quadril", "Rigidez de quadril", "bilateral_numero", unidade="°"),
-        Campo("lunge_test", "Lunge test (dorsiflexão de tornozelo)", "bilateral_numero", unidade="°"),
+        Campo(
+            "flexibilidade_isquiotibiais", "Flexibilidade de isquiotibiais", "bilateral_numero", unidade="°",
+            ajuda="Referência: quanto mais próximo de 0°, mais flexível.",
+        ),
+        Campo(
+            "rigidez_quadril", "Rigidez de quadril", "bilateral_numero", unidade="°",
+            ajuda="Referência: 30°–40°.",
+        ),
+        Campo(
+            "lunge_test", "Lunge test (dorsiflexão de tornozelo)", "bilateral_numero", unidade="°",
+            ajuda="Referência: 35°–45° (média de 3 valores).",
+        ),
         Campo("thomas_iliopsoas", "Teste de Thomas — Iliopsoas", "bilateral_sinal"),
         Campo("thomas_reto_femoral", "Teste de Thomas — Reto femoral", "bilateral_sinal"),
     ),
@@ -164,9 +186,18 @@ _MMII_FORCA = Secao(
     id="mmii_forca",
     titulo="Força",
     campos=(
-        Campo("gluteo_medio", "Glúteo médio", "bilateral_numero", unidade="repetições"),
-        Campo("extensores_quadril", "Extensores de quadril", "bilateral_numero", unidade="repetições", observacao=True),
-        Campo("rotadores_quadril", "Rotadores de quadril", "bilateral_numero", unidade="repetições"),
+        Campo(
+            "gluteo_medio", "Glúteo médio", "bilateral_numero", unidade="repetições",
+            ajuda="Referência: máximo de 15 repetições.",
+        ),
+        Campo(
+            "extensores_quadril", "Extensores de quadril", "bilateral_numero", unidade="repetições", observacao=True,
+            ajuda="Referência: máximo de 20 repetições.",
+        ),
+        Campo(
+            "rotadores_quadril", "Rotadores de quadril", "bilateral_numero", unidade="repetições",
+            ajuda="Referência: máximo de 15 repetições.",
+        ),
     ),
 )
 
@@ -174,9 +205,18 @@ _MMII_CONTROLE_MOTOR = Secao(
     id="mmii_controle_motor",
     titulo="Controle Motor e Estabilidade",
     campos=(
-        Campo("estabilidade_lombo_pelvica", "Estabilidade lombo-pélvica", "bilateral_numero", unidade="°"),
-        Campo("prancha_lateral", "Prancha lateral", "bilateral_numero", unidade="segundos"),
-        Campo("prancha_frontal", "Prancha frontal (bilateral)", "unico_numero", unidade="segundos"),
+        Campo(
+            "estabilidade_lombo_pelvica", "Estabilidade lombo-pélvica", "bilateral_numero", unidade="°",
+            ajuda="Referência: 0°.",
+        ),
+        Campo(
+            "prancha_lateral", "Prancha lateral", "bilateral_tempo",
+            ajuda="Referência: 1 minuto.",
+        ),
+        Campo(
+            "prancha_frontal", "Prancha frontal (bilateral)", "unico_tempo",
+            ajuda="Referência: 1 minuto.",
+        ),
     ),
 )
 
@@ -184,11 +224,24 @@ _MMII_ANALISE_MOVIMENTO = Secao(
     id="mmii_analise_movimento",
     titulo="Análise de Movimento",
     campos=(
-        Campo("step_down", "Step Down", "bilateral_score"),
+        Campo(
+            "step_down", "Step Down", "bilateral_score",
+            ajuda=(
+                "1 = ruim (alterações importantes no controle do movimento) · "
+                "2 = moderado (alterações leves a moderadas) · "
+                "3 = bom (boa execução, alinhamento e controle motor). "
+                "Observa valgo dinâmico, queda da pelve, rotação e inclinação de tronco."
+            ),
+        ),
         Campo("agachamento_bilateral", "Agachamento bilateral (qualidade do movimento)", "unico_texto"),
         Campo("agachamento_unilateral", "Agachamento unilateral", "bilateral_numero", unidade="repetições"),
         Campo("salto_unilateral", "Salto unilateral", "bilateral_score"),
         Campo("observacoes_gerais", "Observações da análise de movimento", "unico_texto"),
+        Campo("foto_analise_movimento", "Foto do teste", "foto_unica"),
+        Campo(
+            "video_analise_movimento", "Vídeo do teste (upload)", "video_upload",
+            ajuda="Vídeo já gravado no tablet/celular — fica anexado, não entra no PDF impresso.",
+        ),
     ),
 )
 
@@ -210,27 +263,9 @@ _MMII_HOP_TEST = Secao(
     campos=(
         Campo("single_hop", "Single Hop", "bilateral_numero", unidade="cm"),
         Campo("triple_hop", "Triple Hop", "bilateral_numero", unidade="cm"),
-        Campo("cross_over_hop", "Cross Over Hop", "bilateral_numero", unidade="cm"),
+        Campo("cross_over_hop", "Cross Over Hop", "bilateral_numero", unidade="segundos"),
         Campo("seis_m_hop", "6 m Hop", "bilateral_numero", unidade="segundos"),
     ),
-)
-
-_MMII_DINAMOMETRIA = SecaoRepetivel(
-    id="mmii_dinamometria",
-    titulo="Dinamometria",
-    colunas=(
-        ("grupo_muscular", "Grupo muscular"),
-        ("direito", "Direito (kgf)"),
-        ("esquerdo", "Esquerdo (kgf)"),
-    ),
-    minimo_linhas=3,
-    tem_toggle_realizado=True,
-)
-
-_MMII_TERMOGRAFIA = Secao(
-    id="mmii_termografia",
-    titulo="Termografia",
-    campos=(Campo("observacao", "Observação", "unico_texto"),),
 )
 
 PROTOCOLO_MMII = Protocolo(
@@ -244,8 +279,6 @@ PROTOCOLO_MMII = Protocolo(
         _MMII_ANALISE_MOVIMENTO,
         _MMII_Y_BALANCE,
         _MMII_HOP_TEST,
-        _MMII_DINAMOMETRIA,
-        _MMII_TERMOGRAFIA,
         DOR,
         TESTES_ADICIONAIS,
         FOTOS,
@@ -268,8 +301,8 @@ _MMSS_AVALIACAO = Secao(
         Campo("gird", "GIRD", "bilateral_numero", unidade="°"),
         Campo("encurtamento_peitoral", "Encurtamento de Peitoral", "bilateral_sinal"),
         Campo("encurtamento_grande_dorsal", "Encurtamento de Grande Dorsal", "bilateral_sinal"),
-        Campo("prancha_frontal", "Prancha Frontal", "bilateral_numero", unidade="segundos"),
-        Campo("prancha_lateral", "Prancha Lateral", "bilateral_numero", unidade="segundos"),
+        Campo("prancha_frontal", "Prancha Frontal", "bilateral_tempo"),
+        Campo("prancha_lateral", "Prancha Lateral", "bilateral_tempo"),
     ),
 )
 

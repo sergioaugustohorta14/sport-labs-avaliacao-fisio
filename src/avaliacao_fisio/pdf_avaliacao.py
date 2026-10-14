@@ -81,8 +81,12 @@ def _cabecalho_faixa(titulo: str, subtitulo: str) -> list:
 
 def _tabela_secao_fixa(secao_saida: dict) -> list:
     definicao = secao_saida["definicao"]
-    campos_bilaterais = [c for c in definicao.campos if c.tipo in ("bilateral_numero", "bilateral_sinal", "bilateral_score")]
-    campos_unicos = [c for c in definicao.campos if c not in campos_bilaterais]
+    campos_bilaterais = [
+        c for c in definicao.campos
+        if c.tipo in ("bilateral_numero", "bilateral_sinal", "bilateral_score", "bilateral_tempo")
+    ]
+    campos_fotografia = [c for c in definicao.campos if c.tipo in ("foto_unica", "video_upload")]
+    campos_unicos = [c for c in definicao.campos if c not in campos_bilaterais and c not in campos_fotografia]
     elementos: list = []
 
     if campos_bilaterais:
@@ -117,6 +121,35 @@ def _tabela_secao_fixa(secao_saida: dict) -> list:
             elementos.append(Spacer(1, 0.2 * cm))
         elementos.append(tabela)
 
+    for campo in campos_fotografia:
+        valor = secao_saida["campos"][campo.id]
+        if elementos:
+            elementos.append(Spacer(1, 0.2 * cm))
+        if campo.tipo == "foto_unica":
+            elementos.append(Paragraph(f"<b>{campo.rotulo}</b>", _ESTILOS["Normal"]))
+            elementos.extend(_elementos_foto_unica(valor))
+        else:  # video_upload — não entra no PDF, só uma nota de que foi anexado
+            texto = (
+                f"<b>{campo.rotulo}:</b> anexado nesta sessão — {valor['nome']}"
+                if valor else f"<b>{campo.rotulo}:</b> nenhum vídeo anexado (upload não entra no PDF impresso)"
+            )
+            elementos.append(Paragraph(texto, _ESTILOS["Normal"]))
+
+    return elementos
+
+
+def _elementos_foto_unica(valor: dict) -> list:
+    if not valor.get("foto_bytes"):
+        return [Paragraph("Nenhuma foto registrada.", _CELULA)]
+    try:
+        imagem = Image(io.BytesIO(valor["foto_bytes"]), width=8 * cm, height=6 * cm, kind="proportional")
+    except Exception:
+        return [Paragraph("Nenhuma foto registrada.", _CELULA)]
+    imagem.hAlign = "CENTER"
+    elementos: list = [imagem]
+    if valor.get("descricao"):
+        legenda = ParagraphStyle("LegendaFotoUnica", parent=_ESTILOS["Normal"], fontSize=9, alignment=1, spaceBefore=2)
+        elementos.append(Paragraph(valor["descricao"], legenda))
     return elementos
 
 
@@ -191,6 +224,12 @@ def _elementos_fotos(secao_saida: dict) -> list:
         if foto.get("descricao"):
             legenda = ParagraphStyle("LegendaFoto", parent=_ESTILOS["Normal"], fontSize=9, alignment=1, spaceBefore=2)
             elementos.append(Paragraph(foto["descricao"], legenda))
+        if foto.get("observacao"):
+            observacao_estilo = ParagraphStyle(
+                "ObservacaoFoto", parent=_ESTILOS["Normal"], fontSize=8, alignment=1,
+                textColor=colors.grey, spaceBefore=1,
+            )
+            elementos.append(Paragraph(foto["observacao"], observacao_estilo))
         elementos.append(Spacer(1, 0.4 * cm))
     return elementos
 
