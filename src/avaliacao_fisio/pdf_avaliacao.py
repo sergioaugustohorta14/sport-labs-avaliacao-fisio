@@ -178,7 +178,7 @@ def _secao_fixa(secao: dict) -> list:
             pares.append((rotulo, texto))
     if pares:
         if elementos:
-            elementos.append(Spacer(1, 0.2 * cm))
+            elementos.append(Spacer(1, 0.4 * cm))
         elementos.append(_tabela_chave_valor(pares))
 
     for campo in fotografias:
@@ -242,7 +242,11 @@ def _secao_dor(secao: dict, titulo: list) -> list:
                 Paragraph(_texto_valor(local.get("regiao")), CELULA), Paragraph(_texto_valor(local.get("lado")), CELULA),
                 Paragraph(f"{intensidade} / 10" if intensidade is not None else "", CELULA),
             ])
-        elementos += [Spacer(1, 0.2 * cm), pdf_base.tabela(linhas, (0.5, 0.25, 0.25))]
+        rotulo_locais = ParagraphStyle(
+            "RotuloLocais", parent=CELULA, fontSize=9.5, leading=12, fontName="Helvetica-Bold",
+            textColor=pdf_base.COR_ESCURO, spaceBefore=18, spaceAfter=6,
+        )
+        elementos += [Paragraph("Locais de dor", rotulo_locais), pdf_base.tabela(linhas, (0.5, 0.25, 0.25))]
     return elementos
 
 

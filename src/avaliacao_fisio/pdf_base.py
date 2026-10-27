@@ -65,7 +65,7 @@ _MARCA = ParagraphStyle("Marca", parent=_ESTILOS["Normal"], fontSize=12, textCol
 _INFO_CARD = ParagraphStyle("InfoCard", parent=_ESTILOS["Normal"], fontSize=9, leading=12)
 TITULO_SECAO = ParagraphStyle(
     "TituloSecao", parent=_ESTILOS["Normal"], fontSize=11.5, leading=14, textColor=COR_ESCURO,
-    fontName="Helvetica-Bold", spaceBefore=11, spaceAfter=6, keepWithNext=1,
+    fontName="Helvetica-Bold", spaceBefore=22, spaceAfter=9, keepWithNext=1,
 )
 
 _TAM_ICONE = 0.42 * cm
