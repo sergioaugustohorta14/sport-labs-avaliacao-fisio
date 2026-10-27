@@ -100,7 +100,7 @@ def _desenho(serie: list[dict], sentido: str | None, formatar: Callable) -> Draw
     return desenho
 
 
-def _tabela_valores(serie: list[dict], formatar: Callable) -> Table:
+def _tabela_valores(serie: list[dict], formatar: Callable, colorir: bool = True) -> Table:
     """Tabela leve: cabeçalho claro, sem zebra, só uma linha fina entre as datas.
     Sem a unidade em cada célula: ela já está no título do gráfico."""
 
@@ -115,7 +115,7 @@ def _tabela_valores(serie: list[dict], formatar: Callable) -> Table:
         if pct is None:
             texto_pct = ""
         else:
-            cor = pdf_base.CORES_FAIXA[assimetria.faixa(pct)][2].hexval()[2:]
+            cor = pdf_base.CORES_FAIXA[assimetria.faixa(pct)][2].hexval()[2:] if colorir else "55554f"
             texto_pct = f'<font color="#{cor}"><b>{pdf_base.numero_br(pct, 1)}%</b></font>'
         linhas.append([
             Paragraph(data_curta(ponto["data"]), cel), Paragraph(texto_valor(ponto.get("D")), cel),
@@ -134,12 +134,15 @@ def _tabela_valores(serie: list[dict], formatar: Callable) -> Table:
     return t
 
 
-def bloco(titulo: str, unidade: str | None, serie: list[dict], sentido: str | None, formatar: Callable | None = None) -> Table:
+def bloco(
+    titulo: str, unidade: str | None, serie: list[dict], sentido: str | None, formatar: Callable | None = None,
+    colorir: bool = True,
+) -> Table:
     formatar = formatar or _padrao
     serie = serie[-MAX_DATAS:]
     rotulo = f"{titulo} ({unidade})" if unidade else titulo
     card = Table(
-        [[Paragraph(rotulo, _TITULO_BLOCO)], [_desenho(serie, sentido, formatar)], [_tabela_valores(serie, formatar)]],
+        [[Paragraph(rotulo, _TITULO_BLOCO)], [_desenho(serie, sentido if colorir else None, formatar)], [_tabela_valores(serie, formatar, colorir)]],
         colWidths=[_LARGURA_CARD],
     )
     card.setStyle(TableStyle([
@@ -165,7 +168,13 @@ def grade(blocos: list[Table]) -> list:
     return linhas
 
 
-def legenda() -> list:
+def legenda(com_risco: bool = True) -> list:
+    if not com_risco:
+        texto = (
+            "A assimetria é a diferença entre os lados em relação ao lado com o maior valor medido. "
+            "Nas métricas de corrida ela é apenas informativa: não há faixa de risco definida."
+        )
+        return [Spacer(1, 0.1 * cm), Paragraph(texto, _LEGENDA)]
     verde, amarelo, vermelho = (
         pdf_base.CORES_FAIXA[f][0].hexval()[2:] for f in (assimetria.BAIXA, assimetria.MEDIA, assimetria.ALTA)
     )

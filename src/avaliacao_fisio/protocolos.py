@@ -49,6 +49,9 @@ class Campo:
     # None = sem direção clara (flexibilidade, amplitude) — nenhum lado é
     # destacado como o mais fraco nos gráficos de evolução.
     sentido: str | None = "maior"
+    # False: a assimetria aparece só como número, sem a cor de "chance de lesão"
+    # (as faixas de 10%/20% foram definidas pra testes de força, não pra métricas de corrida).
+    risco: bool = True
 
 
 @dataclass(frozen=True)
@@ -56,6 +59,13 @@ class Secao:
     id: str
     titulo: str
     campos: tuple[Campo, ...] = ()
+
+
+@dataclass(frozen=True)
+class SecaoCorrida(Secao):
+    """Seção cujos valores (métricas por pé) podem ser importados de uma corrida do
+    RunScribe. Depois de importados continuam editáveis à mão. O `id` de cada campo
+    bilateral é o nome da métrica na API do RunScribe."""
 
 
 @dataclass(frozen=True)
@@ -344,7 +354,57 @@ PROTOCOLO_MMSS = Protocolo(
     ),
 )
 
+# ---------------------------------------------------------------------------
+# Corrida — métricas por pé importadas do RunScribe (direito = D, esquerdo = E)
+# ---------------------------------------------------------------------------
+
+
+def _metrica_corrida(id: str, rotulo: str, unidade: str, casas: int) -> Campo:
+    return Campo(id, rotulo, "bilateral_numero", unidade=unidade, casas_decimais=casas, sentido=None, risco=False)
+
+
+_CORRIDA_RUNSCRIBE = SecaoCorrida(
+    id="corrida_runscribe",
+    titulo="Corrida (RunScribe)",
+    campos=(
+        Campo("corrida_analisada", "Corrida analisada", "unico_texto"),
+        Campo("distancia_m", "Distância", "unico_numero", unidade="m", casas_decimais=0),
+        Campo("duracao_min", "Duração", "unico_numero", unidade="min", casas_decimais=1),
+        Campo("passos", "Passos", "unico_numero", casas_decimais=0),
+        _metrica_corrida("step_rate", "Cadência", "passos/min", 1),
+        _metrica_corrida("stride_length", "Comprimento da passada", "m", 2),
+        _metrica_corrida("contact_time", "Tempo de contato", "ms", 0),
+        _metrica_corrida("flight_ratio", "Razão de voo", "%", 1),
+        _metrica_corrida("power", "Potência", "W", 0),
+        _metrica_corrida("shock", "Choque", "G", 1),
+        _metrica_corrida("impact_gs", "Impacto", "G", 1),
+        _metrica_corrida("braking_gs", "Frenagem", "G", 1),
+        _metrica_corrida("pronation_excursion_fs_mp", "Excursão de pronação", "°", 1),
+        _metrica_corrida("max_pronation_velocity", "Velocidade máxima de pronação", "°/s", 0),
+        _metrica_corrida("footstrike_type", "Tipo de pisada (índice)", "", 1),
+        _metrica_corrida("kleg", "Rigidez da perna", "kN/m", 1),
+        _metrica_corrida("kvert", "Rigidez vertical", "kN/m", 1),
+    ),
+)
+
+METRICAS_RUNSCRIBE: tuple[str, ...] = tuple(c.id for c in _CORRIDA_RUNSCRIBE.campos if c.tipo == "bilateral_numero")
+
+PROTOCOLO_CORRIDA = Protocolo(
+    id="corrida",
+    nome="Corrida",
+    secoes=(
+        DADOS_PACIENTE,
+        _CORRIDA_RUNSCRIBE,
+        DOR,
+        TESTES_ADICIONAIS,
+        FOTOS,
+        CLASSIFICACAO_RISCO,
+        RESPONSAVEL,
+    ),
+)
+
 PROTOCOLOS: dict[str, Protocolo] = {
     PROTOCOLO_MMII.id: PROTOCOLO_MMII,
     PROTOCOLO_MMSS.id: PROTOCOLO_MMSS,
+    PROTOCOLO_CORRIDA.id: PROTOCOLO_CORRIDA,
 }

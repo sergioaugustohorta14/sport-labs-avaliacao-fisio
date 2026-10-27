@@ -22,6 +22,7 @@ from reportlab.platypus import (
 )
 
 from avaliacao_fisio import assimetria, pdf_base, pdf_graficos
+from avaliacao_fisio.protocolos import SecaoCorrida
 from avaliacao_fisio.pdf_base import (
     CELULA, CELULA_CABECALHO, CELULA_CABECALHO_CENTRO, CELULA_CENTRO, CELULA_OBS, LARGURA_UTIL, numero_br,
 )
@@ -101,10 +102,12 @@ def _cartao_paciente(dados: dict) -> Table:
 
 
 # --------------------------------------------------------------------------- seções
-def _celula_assimetria(d, e) -> object:
+def _celula_assimetria(d, e, colorir: bool = True) -> object:
     pct = assimetria.percentual(d, e)
     if pct is None:
         return ""
+    if not colorir:
+        return pdf_base.badge(f"{numero_br(pct, 1)}%", pdf_base.COR_ZEBRA, pdf_base.COR_ESCURO)
     return pdf_base.badge_faixa(f"{numero_br(pct, 1)}%", assimetria.faixa(pct))
 
 
@@ -128,7 +131,7 @@ def _tabela_bilateral(secao: dict, campos) -> list:
         rotulo = f"{campo.rotulo} ({campo.unidade})" if campo.unidade else campo.rotulo
         linhas.append([
             Paragraph(_esc(rotulo), CELULA), Paragraph(_texto_valor(d), CELULA_CENTRO),
-            Paragraph(_texto_valor(e), CELULA_CENTRO), _celula_assimetria(num_d, num_e),
+            Paragraph(_texto_valor(e), CELULA_CENTRO), _celula_assimetria(num_d, num_e, campo.risco),
         ])
         if campo.observacao and valor.get("obs"):
             linhas.append([Paragraph(f"Observação: {_esc(valor['obs'])}", CELULA_OBS), "", "", ""])
@@ -177,9 +180,14 @@ def _secao_fixa(secao: dict) -> list:
             rotulo = f"{campo.rotulo} ({campo.unidade})" if campo.unidade else campo.rotulo
             pares.append((rotulo, texto))
     if pares:
-        if elementos:
-            elementos.append(Spacer(1, 0.4 * cm))
-        elementos.append(_tabela_chave_valor(pares))
+        resumo = [_tabela_chave_valor(pares)]
+        if isinstance(secao["definicao"], SecaoCorrida):
+            # Na corrida, o resumo (qual corrida, distância, duração) vem antes das métricas.
+            elementos = resumo + ([Spacer(1, 0.4 * cm)] + elementos if elementos else [])
+        else:
+            if elementos:
+                elementos.append(Spacer(1, 0.4 * cm))
+            elementos += resumo
 
     for campo in fotografias:
         valor = secao["campos"].get(campo.id)
@@ -275,8 +283,10 @@ def _secao_fotos(secao: dict) -> list:
 
 
 # --------------------------------------------------------------------------- evolução
-def _blocos_evolucao(dados: dict, series: dict) -> list:
+def _blocos_evolucao(dados: dict, series: dict) -> tuple[list, bool]:
+    """(blocos de gráfico, algum deles usa a cor de risco)."""
     blocos = []
+    usa_risco = False
     for secao in dados["secoes"]:
         if secao["tipo"] != "secao":
             continue
@@ -287,9 +297,10 @@ def _blocos_evolucao(dados: dict, series: dict) -> list:
             tempo = campo.tipo == "bilateral_tempo"
             blocos.append(pdf_graficos.bloco(
                 campo.rotulo, None if tempo else campo.unidade, serie, campo.sentido,
-                formatar=_formatar_tempo if tempo else None,
+                formatar=_formatar_tempo if tempo else None, colorir=campo.risco,
             ))
-    return blocos
+            usa_risco = usa_risco or campo.risco
+    return blocos, usa_risco
 
 
 # --------------------------------------------------------------------------- documento
@@ -381,9 +392,9 @@ def gerar(dados: dict, series: dict | None = None) -> bytes:
         if conteudo:
             elementos += pdf_base.titulo_secao(secao["titulo"]) + conteudo
 
-    blocos = _blocos_evolucao(dados, series or {})
+    blocos, usa_risco = _blocos_evolucao(dados, series or {})
     if blocos:
-        elementos += pdf_base.titulo_secao("Evolução entre avaliações") + pdf_graficos.grade(blocos) + pdf_graficos.legenda()
+        elementos += pdf_base.titulo_secao("Evolução entre avaliações") + pdf_graficos.grade(blocos) + pdf_graficos.legenda(usa_risco)
 
     elementos += _assinaturas(dados)
 

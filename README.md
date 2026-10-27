@@ -77,6 +77,20 @@ GOOGLE_AVALIACOES_SHEET_ID = "id-da-planilha"
 # conteúdo do JSON da conta de serviço (type, project_id, private_key, ...)
 ```
 
+## Protocolo de Corrida (RunScribe)
+
+O protocolo "Corrida" importa as métricas por pé (cadência, tempo de contato,
+potência, impacto, pronação...) de uma corrida registrada no RunScribe. Precisa
+das credenciais da conta nos Secrets, como chaves de nível raiz (antes de
+qualquer `[tabela]`):
+
+```toml
+RUNSCRIBE_EMAIL = "e-mail-da-conta"
+RUNSCRIBE_PASSWORD = "senha-da-conta"
+```
+
+Sem elas, a seção de Corrida continua funcionando para preenchimento manual.
+
 ## Relatório do Kinology
 
 Na tela de Revisão, é possível enviar o PDF gerado no Kinology e escolher

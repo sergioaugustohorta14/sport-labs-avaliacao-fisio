@@ -14,6 +14,7 @@ corrida). O formato real das respostas é confirmado na primeira chamada de verd
 """
 from __future__ import annotations
 
+import concurrent.futures
 from typing import Any
 
 import requests
@@ -73,21 +74,36 @@ def _token() -> str:
     return token
 
 
-def _get(caminho: str, parametros: dict | None = None, tentar_de_novo: bool = True) -> Any:
+def _chamar(token: str, caminho: str, parametros: dict | None = None) -> Any:
+    """GET puro (sem Streamlit): pode rodar em threads."""
     try:
         resposta = requests.get(
-            f"{_base()}{caminho}", params=parametros, headers={"X-Auth-Token": _token()}, timeout=_TIMEOUT,
+            f"{_base()}{caminho}", params=parametros, headers={"X-Auth-Token": token}, timeout=_TIMEOUT,
         )
     except requests.RequestException as erro:
         raise RunScribeErro(f"Não consegui falar com o RunScribe: {erro.__class__.__name__}.") from erro
-    if resposta.status_code in (401, 403) and tentar_de_novo:
-        _token.clear()
-        return _get(caminho, parametros, tentar_de_novo=False)
+    if resposta.status_code in (401, 403):
+        raise _TokenRecusado()
     if resposta.status_code == 404:
         raise RunScribeErro("O RunScribe não encontrou o que foi pedido (404).")
     if not resposta.ok:
         raise RunScribeErro(f"O RunScribe respondeu com erro {resposta.status_code}.")
     return resposta.json()
+
+
+class _TokenRecusado(RunScribeErro):
+    """Token vencido ou recusado: o chamador renova o login e tenta de novo."""
+
+
+def _get(caminho: str, parametros: dict | None = None) -> Any:
+    try:
+        return _chamar(_token(), caminho, parametros)
+    except _TokenRecusado:
+        _token.clear()
+        try:
+            return _chamar(_token(), caminho, parametros)
+        except _TokenRecusado as erro:
+            raise RunScribeErro("O RunScribe recusou o acesso mesmo depois de refazer o login.") from erro
 
 
 def listar_corridas(limite: int = 50, a_partir_de: str | None = None) -> Any:
@@ -108,3 +124,68 @@ def metrica(run_id: str | int, nome: str, unidades: str = "metric") -> Any:
 def estatisticas(de: str | None = None, ate: str | None = None) -> Any:
     parametros = {k: v for k, v in (("from", de), ("to", ate)) if v}
     return _get("/v2/account/stats", parametros)
+
+
+# --------------------------------------------------------------------------- corridas pro protocolo de Corrida
+@st.cache_data(ttl=600, show_spinner=False)
+def corridas_resumidas() -> list[dict]:
+    """Todas as corridas da conta, da mais recente pra mais antiga, só com o que a
+    tela precisa. A conta da clínica enxerga as corridas de TODOS os atletas; o
+    paciente é identificado apenas pela etiqueta (`label`) digitada no app."""
+    brutas = listar_corridas(1000).get("runs", [])
+    return [{
+        "id": r["id"],
+        "label": (r.get("label") or "").strip(),
+        "data": str(r.get("timestamp", ""))[:10],
+        "distancia": r.get("distance"),
+        "tempo": r.get("time"),
+        "passos": r.get("steps"),
+        "pes": sorted({m["position"] for m in r.get("mountings", []) if m.get("position") in ("left", "right")}),
+    } for r in brutas]
+
+
+_LADO_DO_PE = {"right": "D", "left": "E"}
+
+
+def _media_por_pe(resposta_metrica: dict) -> dict[str, float | None]:
+    """{"D": média do pé direito, "E": média do pé esquerdo} de uma métrica. Se o pé
+    tiver mais de um sensor, vale o dos cadarços (`laces`)."""
+    medias: dict[str, float | None] = {"D": None, "E": None}
+    for montagem in resposta_metrica.get("metric", {}).get("mountings", []):
+        lado = _LADO_DO_PE.get(montagem.get("foot"))
+        if lado is None or (medias[lado] is not None and montagem.get("placement") != "laces"):
+            continue
+        valor = montagem.get("average")
+        if not isinstance(valor, (int, float)) or isinstance(valor, bool):
+            valores = [v for v in montagem.get("values", []) if isinstance(v, (int, float))]
+            valor = sum(valores) / len(valores) if valores else None
+        medias[lado] = float(valor) if valor is not None else None
+    return medias
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def resumo_corrida(run_id: int, metricas: tuple[str, ...]) -> dict:
+    """Dados de uma corrida: {"corrida": {...}, "metricas": {nome: {"D": x, "E": y}}}.
+    As métricas são buscadas em paralelo (uma chamada por métrica)."""
+    token = _token()
+    try:
+        detalhe = _chamar(token, f"/v2/runs/{run_id}").get("run", {})
+    except _TokenRecusado:
+        _token.clear()
+        raise RunScribeErro("O RunScribe recusou o acesso. Tente de novo.")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+        futuros = {nome: pool.submit(_chamar, token, f"/v2/runs/{run_id}/metric/{nome}", {"units": "metric"}) for nome in metricas}
+        resultado: dict[str, dict[str, float | None]] = {}
+        for nome, futuro in futuros.items():
+            try:
+                resultado[nome] = _media_por_pe(futuro.result())
+            except Exception:
+                resultado[nome] = {"D": None, "E": None}
+    return {
+        "corrida": {
+            "id": detalhe.get("id", run_id), "label": (detalhe.get("label") or "").strip(),
+            "data": str(detalhe.get("timestamp", ""))[:10], "distancia": detalhe.get("distance"),
+            "tempo": detalhe.get("time"), "passos": detalhe.get("steps"),
+        },
+        "metricas": resultado,
+    }

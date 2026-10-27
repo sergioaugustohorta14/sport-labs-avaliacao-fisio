@@ -25,14 +25,16 @@ import uuid
 import streamlit as st
 import streamlit.components.v1 as components
 
-from avaliacao_fisio import assimetria, estilo, feegow_client, historico, pdf_anexos, pdf_avaliacao
+from avaliacao_fisio import assimetria, estilo, feegow_client, historico, pdf_anexos, pdf_avaliacao, runscribe_client
 from avaliacao_fisio.protocolos import (
+    METRICAS_RUNSCRIBE,
     PROTOCOLO_MMII,
     PROTOCOLO_MMSS,
     PROTOCOLOS,
     Campo,
     Protocolo,
     Secao,
+    SecaoCorrida,
     SecaoDor,
     SecaoFotos,
     SecaoRepetivel,
@@ -143,8 +145,18 @@ def _rolar_offset(identificador: str, pixels: int = 220) -> None:
 # Renderização dos campos
 # ---------------------------------------------------------------------------
 
-def renderizar_secao(secao: Secao) -> None:
-    st.markdown(f"## {secao.titulo}")
+def _valor_inicial(chave: str, padrao=None) -> dict:
+    """`value=` do widget — omitido quando a key do widget já existe no session_state
+    (valor importado/forçado), senão o Streamlit avisa que os dois foram usados."""
+    if f"w__{chave}" in st.session_state:
+        return {}
+    valor = _obter(chave)
+    return {"value": valor if valor is not None else padrao}
+
+
+def renderizar_secao(secao: Secao, titulo: bool = True) -> None:
+    if titulo:
+        st.markdown(f"## {secao.titulo}")
     for campo in secao.campos:
         _renderizar_campo(secao.id, campo)
         st.divider()
@@ -170,7 +182,7 @@ def _renderizar_campo(secao_id: str, campo: Campo) -> None:
     chave = _chave(secao_id, campo.id)
 
     if tipo == "unico_texto":
-        valor = st.text_input(campo.rotulo, value=_obter(chave) or "", key=f"w__{chave}", help=campo.ajuda)
+        valor = st.text_input(campo.rotulo, **_valor_inicial(chave, ""), key=f"w__{chave}", help=campo.ajuda)
         _guardar(chave, valor)
     elif tipo == "idade_calculada":
         # Sem widget — deriva de "data_nascimento" (campo anterior, mesma
@@ -217,8 +229,8 @@ def _renderizar_campo(secao_id: str, campo: Campo) -> None:
         _guardar(chave, valor)
     elif tipo == "unico_numero":
         rotulo = f"{campo.rotulo} ({campo.unidade})" if campo.unidade else campo.rotulo
-        passo = 10 ** -campo.casas_decimais
-        valor = st.number_input(rotulo, value=_obter(chave), step=passo, format=f"%.{campo.casas_decimais}f", key=f"w__{chave}", help=campo.ajuda)
+        passo = float(10 ** -campo.casas_decimais)
+        valor = st.number_input(rotulo, **_valor_inicial(chave), step=passo, format=f"%.{campo.casas_decimais}f", key=f"w__{chave}", help=campo.ajuda)
         _guardar(chave, valor)
     elif tipo in ("bilateral_tempo", "unico_tempo"):
         st.markdown(f"**{campo.rotulo}**")
@@ -277,11 +289,11 @@ def _renderizar_campo(secao_id: str, campo: Campo) -> None:
         chave_d, chave_e = _chave(secao_id, campo.id, "D"), _chave(secao_id, campo.id, "E")
 
         if tipo == "bilateral_numero":
-            passo = 10 ** -campo.casas_decimais
+            passo = float(10 ** -campo.casas_decimais)
             with col_d:
-                valor_d = st.number_input("Direito", value=_obter(chave_d), step=passo, format=f"%.{campo.casas_decimais}f", key=f"w__{chave_d}")
+                valor_d = st.number_input("Direito", **_valor_inicial(chave_d), step=passo, format=f"%.{campo.casas_decimais}f", key=f"w__{chave_d}")
             with col_e:
-                valor_e = st.number_input("Esquerdo", value=_obter(chave_e), step=passo, format=f"%.{campo.casas_decimais}f", key=f"w__{chave_e}")
+                valor_e = st.number_input("Esquerdo", **_valor_inicial(chave_e), step=passo, format=f"%.{campo.casas_decimais}f", key=f"w__{chave_e}")
             avancar = False
         elif tipo == "bilateral_sinal":
             opcoes = ["+", "-"]
@@ -307,6 +319,109 @@ def _renderizar_campo(secao_id: str, campo: Campo) -> None:
             _guardar(chave_obs, valor_obs)
     else:
         st.warning(f"Tipo de campo não suportado: {tipo}")
+
+
+def _casa_nome(etiqueta: str, nome_paciente: str) -> bool:
+    """A etiqueta da corrida no RunScribe é texto livre (ex.: "Suely"). Casa se todas as
+    palavras de um dos lados aparecem no outro (sem acento/caixa); etiquetas padrão
+    ("Run 08 jun 2024") não casam com nenhum nome."""
+    palavras_etiqueta = {p for p in historico.normalizar(etiqueta).split() if len(p) >= 3}
+    palavras_nome = {p for p in historico.normalizar(nome_paciente).split() if len(p) >= 3}
+    if not palavras_etiqueta or not palavras_nome:
+        return False
+    return palavras_etiqueta <= palavras_nome or palavras_nome <= palavras_etiqueta
+
+
+def _data_br(iso: str) -> str:
+    try:
+        return dt.date.fromisoformat(iso).strftime("%d/%m/%Y")
+    except ValueError:
+        return iso or "?"
+
+
+def _texto_corrida(corrida: dict) -> str:
+    distancia = f"{corrida['distancia'] / 1000:.2f} km".replace(".", ",") if corrida.get("distancia") else "distância ?"
+    return f"{_data_br(corrida['data'])} · {corrida['label'] or 'sem nome'} · {distancia}"
+
+
+def _aplicar_corrida(secao: SecaoCorrida, resumo: dict) -> None:
+    """Grava os valores da corrida escolhida nos campos da seção. Escreve no dict de
+    respostas E direto na key do widget (o Streamlit ignora `value=` de um widget cuja
+    key já existe); valor ausente remove a key pro campo voltar a ficar em branco."""
+    corrida, metricas = resumo["corrida"], resumo["metricas"]
+
+    def gravar(chave: str, valor, casas: int = 1) -> None:
+        if valor is not None and not isinstance(valor, str):
+            valor = round(float(valor), casas)
+        _guardar(chave, valor)
+        if valor is None:
+            st.session_state.pop(f"w__{chave}", None)
+        else:
+            st.session_state[f"w__{chave}"] = valor
+
+    for campo in secao.campos:
+        chave = _chave(secao.id, campo.id)
+        if campo.id == "corrida_analisada":
+            gravar(chave, f"{_data_br(corrida['data'])} · {corrida['label'] or 'sem nome'} (RunScribe nº {corrida['id']})")
+        elif campo.id == "distancia_m":
+            gravar(chave, corrida.get("distancia"), campo.casas_decimais)
+        elif campo.id == "duracao_min":
+            tempo = corrida.get("tempo")
+            gravar(chave, tempo / 60 if tempo else None, campo.casas_decimais)
+        elif campo.id == "passos":
+            gravar(chave, corrida.get("passos"), campo.casas_decimais)
+        elif campo.tipo == "bilateral_numero":
+            for lado in ("D", "E"):
+                gravar(_chave(secao.id, campo.id, lado), metricas.get(campo.id, {}).get(lado), campo.casas_decimais)
+
+
+def renderizar_secao_corrida(secao: SecaoCorrida) -> None:
+    """Escolha da corrida no RunScribe (importa as métricas por pé) + os campos, que
+    continuam editáveis. Sem integração ou com falha de rede, a seção vira só os
+    campos pra preencher à mão: nunca trava o preenchimento."""
+    st.markdown(f"## {secao.titulo}")
+    if not runscribe_client.configurado():
+        st.info("A integração com o RunScribe não está configurada neste ambiente. Preencha os valores à mão.")
+        renderizar_secao(secao, titulo=False)
+        return
+    try:
+        corridas = runscribe_client.corridas_resumidas()
+    except runscribe_client.RunScribeErro as erro:
+        st.warning(f"{erro} Você pode preencher os valores à mão ou tentar de novo mais tarde.")
+        renderizar_secao(secao, titulo=False)
+        return
+
+    nome = historico.identificar_paciente(_obter(_chave("dados_paciente", "nome_completo")))["nome"]
+    sugeridas = [c for c in corridas if nome and _casa_nome(c["label"], nome)]
+    if sugeridas:
+        mostrar_todas = st.checkbox("Mostrar também as corridas de outros nomes", key="w__corrida_todas")
+        lista = corridas if mostrar_todas else sugeridas
+        st.caption(f"{len(sugeridas)} corrida(s) com o nome do paciente no RunScribe.")
+    else:
+        lista = corridas
+        st.caption("Nenhuma corrida com o nome do paciente no RunScribe: mostrando todas, da mais recente pra mais antiga.")
+
+    por_id = {c["id"]: c for c in corridas}
+    chave_id = _chave(secao.id, "run_id")
+    salvo = _obter(chave_id)
+    ids = [c["id"] for c in lista]
+    if salvo is not None and salvo not in ids:
+        ids = [salvo] + ids
+    escolha = st.selectbox(
+        "Corrida do RunScribe", options=ids, index=_indice(ids, salvo), placeholder="Escolha a corrida",
+        format_func=lambda i: _texto_corrida(por_id[i]) if i in por_id else f"Corrida {i}", key="w__corrida_runscribe",
+    )
+    if escolha is not None and escolha != salvo:
+        with st.spinner("Buscando as métricas no RunScribe..."):
+            try:
+                resumo = runscribe_client.resumo_corrida(escolha, METRICAS_RUNSCRIBE)
+            except runscribe_client.RunScribeErro as erro:
+                st.error(str(erro))
+            else:
+                _guardar(chave_id, escolha)
+                _aplicar_corrida(secao, resumo)
+    st.caption("Valores importados do RunScribe: pé direito (D) e pé esquerdo (E), média da corrida. Você pode ajustar à mão.")
+    renderizar_secao(secao, titulo=False)
 
 
 def renderizar_secao_repetivel(secao: SecaoRepetivel) -> None:
@@ -624,7 +739,7 @@ def _passo_selecao_protocolo() -> None:
         st.markdown("**Protocolo**")
         protocolo_opcao = st.segmented_control(
             "Protocolo",
-            options=[PROTOCOLO_MMII.nome, PROTOCOLO_MMSS.nome],
+            options=[p.nome for p in PROTOCOLOS.values()],
             label_visibility="collapsed",
             key="segmented_protocolo",
             width="stretch",
@@ -641,7 +756,7 @@ def _passo_selecao_protocolo() -> None:
         )
 
     if st.button("Iniciar Avaliação", type="primary", disabled=not (protocolo_opcao and tipo_opcao)):
-        protocolo_id = PROTOCOLO_MMII.id if protocolo_opcao == PROTOCOLO_MMII.nome else PROTOCOLO_MMSS.id
+        protocolo_id = next(p.id for p in PROTOCOLOS.values() if p.nome == protocolo_opcao)
         st.session_state["protocolo_id"] = protocolo_id
         st.session_state["tipo_avaliacao"] = tipo_opcao
         st.session_state["data_avaliacao"] = dt.date.today()
@@ -743,7 +858,7 @@ def _passo_revisao(protocolo: Protocolo) -> None:
                         st.markdown(f"**{campo.rotulo}:** {texto_video}", unsafe_allow_html=True)
                         continue
                     st.markdown(f"**{campo.rotulo}:** {_formatar_valor(valor)}", unsafe_allow_html=True)
-                    if campo.tipo == "bilateral_numero" and isinstance(valor, dict):
+                    if campo.tipo == "bilateral_numero" and campo.risco and isinstance(valor, dict):
                         barra = _barra_assimetria(valor.get("D"), valor.get("E"))
                         if barra:
                             st.markdown(barra, unsafe_allow_html=True)
@@ -847,6 +962,8 @@ def render() -> None:
         renderizar_secao_dor(secao)
     elif isinstance(secao, SecaoFotos):
         renderizar_secao_fotos(secao)
+    elif isinstance(secao, SecaoCorrida):
+        renderizar_secao_corrida(secao)
     else:
         renderizar_secao(secao)
 

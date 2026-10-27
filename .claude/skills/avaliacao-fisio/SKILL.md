@@ -52,7 +52,8 @@ src/avaliacao_fisio/
 ├── pdf_graficos.py     # Gráficos de barras D/E por data (reportlab.graphics) + tabela + legenda
 ├── historico.py        # Grava/lê os testes na planilha Google; séries de evolução por paciente
 ├── google_sheets_client.py  # Cliente enxuto do Sheets (conta de serviço)
-└── pdf_anexos.py       # Lista as páginas do PDF do Kinology e anexa as escolhidas ao nosso PDF
+├── pdf_anexos.py       # Lista as páginas do PDF do Kinology e anexa as escolhidas ao nosso PDF
+└── runscribe_client.py # API do RunScribe (só leitura): corridas, métricas por pé
 assets/
 ├── logo.png            # Logo com fundo transparente (branco; só serve no tema escuro da tela)
 └── sportlabs-simbolo.png  # Símbolo escuro p/ fundo branco (cabeçalho do PDF)
@@ -257,6 +258,54 @@ a última por (avaliação, teste, lado). Só testes medidos vão pra planilha.
 - Secrets: chaves de nível raiz (`GOOGLE_AVALIACOES_SHEET_ID`) ANTES de
   qualquer `[tabela]` (gotcha do TOML). Valores nunca vão pra skill/README.
 
+### Protocolo de Corrida (`runscribe_client.py`, `SecaoCorrida`)
+
+Terceiro protocolo ("Corrida"), com as métricas por pé importadas do RunScribe
+(https://api.runscribe.com/doc.html, v2). Desenvolvido em 27/10/2026, com a
+diretoria liberando o uso da conta da clínica.
+
+- **Login:** `POST /v2/authenticate` (e-mail e senha) devolve o token, enviado
+  depois no cabeçalho `X-Auth-Token`. Credenciais nos Secrets como chaves de
+  nível raiz (`RUNSCRIBE_EMAIL`, `RUNSCRIBE_PASSWORD`, ANTES de qualquer
+  `[tabela]`); **nunca no código/skill/README** (repo público). Token em cache
+  de 25 min; se vier 401/403, refaz o login uma vez. Só leitura: a única chamada
+  que escreve é o login.
+- **Achados da API (testados com a conta real):** `GET /v2/runs` devolve
+  `{"success": true, "runs": [...]}` e a conta da clínica enxerga as corridas de
+  TODOS os atletas (161 corridas, 133 etiquetas em 27/10/2026). **O paciente só
+  é identificado pela `label`** (texto livre digitado no app do RunScribe, ex.
+  "Suely"); muitas corridas ficam com a etiqueta padrão "Run 08 jun 2024". Não há
+  ID de paciente. `GET /v2/runs/{id}/metric/{nome}` devolve `metric.mountings[]`
+  com `foot` (left/right), `placement` (laces/sacrum), `average`, `timestamps[]`
+  e `values[]`: **a média por pé já vem pronta**. Sensor no sacro tem `foot`
+  nulo e é ignorado. Todas as corridas estão com `calibration: "required"`
+  (valores sem calibração no RunScribe; conferir com a equipe).
+- **Modelo:** `SecaoCorrida` (subclasse de `Secao`) com campos `bilateral_numero`
+  cujo `id` é o nome da métrica na API (`step_rate`, `contact_time`, `power`,
+  `shock`, `impact_gs`, `braking_gs`, `pronation_excursion_fs_mp`,
+  `max_pronation_velocity`, `footstrike_type`, `kleg`, `kvert`...) + resumo
+  (corrida analisada, distância, duração, passos). Direito (D) = pé direito,
+  esquerdo (E) = pé esquerdo. Por serem campos bilaterais comuns, a tabela com
+  assimetria, o histórico em planilha e os gráficos de evolução funcionam sem
+  código extra. `METRICAS_RUNSCRIBE` lista as métricas importadas (acrescentar
+  uma = 1 linha em `_CORRIDA_RUNSCRIBE`).
+- **`Campo.risco=False`** nas métricas de corrida: a assimetria aparece só como
+  número (pílula neutra), sem a cor de "chance de lesão". As faixas de 10%/20%
+  foram definidas pra testes de força; **faixas de risco da corrida dependem do
+  critério da equipe** (pendente). Barra de assimetria da Revisão também só pra
+  `risco=True`. `sentido=None`: nenhum lado é destacado no gráfico.
+- **Tela** (`renderizar_secao_corrida`): lista as corridas cuja etiqueta casa com
+  o nome do paciente (`_casa_nome`: palavras de um lado contidas no outro, sem
+  acento); sem casamento mostra todas, da mais recente pra mais antiga. Ao
+  escolher, `resumo_corrida()` busca as métricas em paralelo (uma chamada por
+  métrica) e `_aplicar_corrida()` grava nos campos, **no dict `respostas` E direto
+  na key do widget** (o Streamlit ignora `value=` de widget com key existente;
+  `_valor_inicial()` omite `value=` nesse caso, e valor ausente remove a key).
+  Valores seguem editáveis à mão. Sem credenciais ou com a API fora do ar a seção
+  vira só os campos manuais (nunca trava).
+- Passo dos `number_input` é decimal (`float(10 ** -casas)`): passo inteiro com
+  formato "%.0f" gera aviso de console do Streamlit.
+
 ### Relatório do Kinology anexado (`pdf_anexos.py`)
 
 Na Revisão, bloco "Relatório do Kinology (opcional)": `st.file_uploader` +
@@ -392,6 +441,12 @@ wrapper próprio (`stDownloadButton`) e não herda o CSS de `.stButton`.
   28/10/2026.
 
 ## Pendências conhecidas
+
+- **Corrida (RunScribe):** repetir `RUNSCRIBE_EMAIL`/`RUNSCRIBE_PASSWORD` nos
+  Secrets do Streamlit Cloud (no topo, antes dos blocos); validar com a equipe
+  quais métricas imprimir e as faixas de referência/risco da corrida; fase 2 =
+  gráficos das métricas ao longo da corrida (séries) e a pegada (`shoe_print`);
+  corridas ainda com `calibration: "required"`.
 
 - **Configurar o histórico (ação do Sergio):** `GOOGLE_AVALIACOES_SHEET_ID`
   e `[gcp_service_account]` nos Secrets (local `.streamlit/secrets.toml` e
