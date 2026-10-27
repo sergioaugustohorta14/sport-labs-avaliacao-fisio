@@ -26,12 +26,14 @@ objetivos terapêuticos redigidos). Essa camada narrativa é uma **fase 2
 futura, explicitamente não iniciada** — só começar com confirmação
 direta do Sergio, mesma preferência já registrada nas outras skills dele.
 
-Também **sem persistência/histórico**: o app só coleta → gera PDF →
-baixa. Não grava em planilha/banco nenhuma avaliação — é stateless além
-da sessão atual do navegador. Consequência real: vídeo anexado
-(`video_upload`) só vive na sessão; se fechar a aba sem gerar o PDF,
-perde (avisado no `help=` do campo, mas reforçar se o Sergio perguntar
-"cadê o vídeo depois").
+**Persistência mínima (desde 27/10/2026):** ao clicar "Gerar PDF" o app
+grava só os TESTES MEDIDOS numa planilha Google (ver "Histórico e
+evolução"), pra montar os gráficos de evolução nas reavaliações. Nada
+mais é guardado: dados do paciente (peso, diagnóstico), dor, fotos e
+vídeo ficam só na sessão do navegador. Consequência real: vídeo anexado
+(`video_upload`) perde-se se fechar a aba sem gerar o PDF (avisado no
+`help=` do campo, mas reforçar se o Sergio perguntar "cadê o vídeo
+depois").
 
 ## Arquitetura do código
 
@@ -43,9 +45,17 @@ src/avaliacao_fisio/
 ├── protocolos.py       # MODELO de dados: Campo/Secao/SecaoRepetivel/SecaoDor/SecaoFotos/Protocolo
 ├── wizard.py           # Motor do wizard: navegação, renderização dos campos, coleta das respostas
 ├── feegow_client.py    # Busca de pacientes cadastrados no Feegow (autocomplete do Nome completo)
-└── pdf_avaliacao.py    # Geração do PDF final (reportlab)
+├── config.py           # obter_config / obter_secret_tabela (st.secrets com fallback pra env)
+├── assimetria.py       # Regra ÚNICA de assimetria (10%/20%) — tela de Revisão e PDF
+├── pdf_base.py         # Componentes visuais do PDF (cabeçalho, cartão, pílula, tabela, rodapé numerado)
+├── pdf_avaliacao.py    # PDF do paciente: monta o documento a partir de coletar_respostas()
+├── pdf_graficos.py     # Gráficos de barras D/E por data (reportlab.graphics) + tabela + legenda
+├── historico.py        # Grava/lê os testes na planilha Google; séries de evolução por paciente
+├── google_sheets_client.py  # Cliente enxuto do Sheets (conta de serviço)
+└── pdf_anexos.py       # Lista as páginas do PDF do Kinology e anexa as escolhidas ao nosso PDF
 assets/
-└── logo.png            # Logo com fundo transparente (preto/branco/dourado)
+├── logo.png            # Logo com fundo transparente (branco; só serve no tema escuro da tela)
+└── sportlabs-simbolo.png  # Símbolo escuro p/ fundo branco (cabeçalho do PDF)
 ```
 
 `protocolos.py` é só o MODELO — `wizard.py` usa essas definições pra
@@ -188,23 +198,72 @@ independente):
   ordem certa (antes do bloco `[auth.users]`) — a busca de paciente
   funciona no app publicado, não só local.
 
-### PDF (`pdf_avaliacao.py`)
+### PDF do paciente (`pdf_avaliacao.py`, `pdf_base.py`, `pdf_graficos.py`)
 
-Mesma espinha dorsal de `feegow_analytics.reports.pdf_repasses`:
-reportlab puro-Python (sem wkhtmltopdf/weasyprint — roda sem
-configuração extra no Streamlit Community Cloud), faixa escura
-`#322f33` com logo centralizado, células `Paragraph` pra quebrar texto
-longo (string pura numa `Table` não quebra linha, só transborda), linha
-de assinatura "Fisioterapeuta Responsável" no rodapé.
+Redesenhado em 27/10/2026 no padrão do "Fechamento de Repasses" do
+Painel Feegow (skill `feegow-analytics`, seção "Padrão visual dos PDFs"):
+cabeçalho com símbolo + "SPORT LABS" + "Gerado em", título com barra
+escura, cartão cinza com os dados do paciente (ícones vetoriais), tabelas
+de cabeçalho escuro arredondado + zebra, pílulas coloridas, "Página X de Y",
+duas linhas de assinatura. **O PDF usa a paleta de impressão** (`#322f33`,
+`#f4f4f1`), NÃO o tema preto/dourado da tela. Helpers copiados (não
+importados) do Feegow-Analytics — os projetos são repositórios independentes.
 
-- Uma seção do protocolo pode gerar até 3 blocos no PDF:
-  tabela bilateral (D/E/Unidade), tabela de campos únicos, e elementos
-  de foto/vídeo — `_tabela_secao_fixa()` separa os `campo.tipo` em
-  `campos_bilaterais`/`campos_unicos`/`campos_fotografia` antes de montar.
-- `video_upload` **nunca aparece como vídeo no PDF** (reportlab não
-  reproduz vídeo) — só uma linha de texto dizendo que foi anexado (ou
-  não) na sessão.
+- Documento voltado ao PACIENTE: **campo/seção sem dado é omitido** (nada
+  de "Não preenchido" ou "-"). Dados do paciente e Classificação de Risco
+  (pílula verde/âmbar/vermelho) viram o cartão do topo; Responsável vira a
+  assinatura. Dor só aparece se houver local ou escala > 0 (o slider começa
+  em 0, então "sem dor" e "não preenchido" não se distinguem).
+- Tabela bilateral: Teste | Direito | Esquerdo | Assimetria (pílula pela faixa
+  de `assimetria.py`). Tempo (prancha) usa `D_seg`/`E_seg` (segundos) pro cálculo.
+- `video_upload` **nunca entra no PDF** (reportlab não reproduz vídeo).
+- Páginas depois da 1ª têm cabeçalho compacto (`BaseDocTemplate` com dois
+  `PageTemplate`); título de seção usa `keepWithNext` (não fica órfão).
 - Nome do arquivo: `avaliacao_<protocolo_id>_<nome_paciente_sem_espaco>_<ddmmaaaa>.pdf`.
+- `gerar(dados, series=None)`: `series` vem de `historico.series_do_paciente`.
+
+### Histórico e evolução (`historico.py`, `pdf_graficos.py`)
+
+Planilha Google "Sport Labs - Avaliações", mesmo padrão do Painel Feegow
+(conta de serviço em `[gcp_service_account]`, planilha compartilhada com o
+e-mail dela como Editor, id em `GOOGLE_AVALIACOES_SHEET_ID`). Formato LONGO
+e só-acrescenta: uma linha por (avaliação x teste x lado), colunas em
+`historico.COLUNAS`. Regravar a mesma avaliação acrescenta linhas com o
+mesmo `id_avaliacao` (uuid criado em "Iniciar Avaliação"); na leitura vale
+a última por (avaliação, teste, lado). Só testes medidos vão pra planilha.
+
+- Paciente identificado por `identificar_paciente()`: ID do Feegow quando
+  veio da busca ("Nome (ID n)" vira `feegow:n`), senão nome normalizado
+  (`nome:<sem acento/caixa>`). A leitura casa por chave OU por nome
+  normalizado (cobre o paciente digitado à mão numa vez e escolhido da busca
+  em outra).
+- `series_do_paciente(linhas, dados_atual)` junta o histórico (sem contar a
+  avaliação atual) com os valores da memória. Gráfico só aparece com **2 ou
+  mais datas**; a primeira avaliação do paciente não tem seção "Evolução".
+- Gráfico (últimas 4 datas): lado mais fraco pela cor da faixa de risco, o
+  outro cinza. `Campo.sentido`: `"maior"` (padrão), `"menor"` (tempo de
+  salto: Cross Over Hop e 6 m Hop) ou `None` (flexibilidade/amplitude, sem
+  lado destacado).
+- **Falha nunca bloqueia o PDF**: planilha fora do ar ou credencial errada
+  só geram aviso na tela e o PDF sai sem evolução. Sem
+  `GOOGLE_AVALIACOES_SHEET_ID` + `[gcp_service_account]` o histórico fica
+  desativado (aviso discreto na Revisão).
+- Secrets: chaves de nível raiz (`GOOGLE_AVALIACOES_SHEET_ID`) ANTES de
+  qualquer `[tabela]` (gotcha do TOML). Valores nunca vão pra skill/README.
+
+### Relatório do Kinology anexado (`pdf_anexos.py`)
+
+Na Revisão, bloco "Relatório do Kinology (opcional)": `st.file_uploader` +
+`st.multiselect` das páginas + checkbox "Incluir curvas brutas". As páginas
+escolhidas entram ao fim do nosso PDF **sem alteração** (`pypdf.PdfWriter`);
+o Kinology mantém a numeração e o rodapé dele, o nosso "Página X de Y"
+conta só as nossas. O PDF do Kinology (24 págs, vetorial) tem: pág. 1 =
+índice, 2 a 8 = resumos, 9 em diante = curvas brutas de "Dinâmica e
+Desempenho Muscular". Padrão: tudo menos índice e curvas. Rótulos vêm do
+texto da página (lista de títulos conhecidos em `_TITULOS_CONHECIDOS`; usar
+NFKC, o PDF tem ligaduras). Título novo do Kinology = 1 linha ali.
+O arquivo fica só na sessão (`st.session_state["kinology_bytes"]`), não vai
+pra planilha nem pro disco.
 
 ### Login (`auth.py`)
 
@@ -296,6 +355,16 @@ Câmera testável via `--use-fake-device-for-media-stream` +
 inclusive setando widgets por `key` e lendo `at.session_state["pdf_bytes"]`
 com `pypdf` pra confirmar que os dados chegaram no PDF final).
 
+**Achados de teste (27/10/2026):** (1) o `AppTest` não simula digitação
+livre num `st.selectbox` com `accept_new_options=True` (`ValueError: x not in
+list`) — nos testes escolher um cadastro que já exista na lista; (2) depois
+de mudar `estilo.py`, **reiniciar o servidor local** (o Streamlit mantém o
+CSS antigo em memória) antes de tirar screenshot; (3) este Streamlit usa
+react-aria no multiselect: caixa = `[data-testid="stMultiSelect"]
+[class*="react-aria-ComboBox"] > div`, etiqueta = `[data-tag]`; checkbox =
+`[data-testid="stCheckbox"] label > span + div`; `st.download_button` tem
+wrapper próprio (`stDownloadButton`) e não herda o CSS de `.stButton`.
+
 ## Histórico de marcos
 
 - **09/10/2026** — v1: wizard MMII+MMSS, PDF reportlab, login opcional,
@@ -310,12 +379,18 @@ com `pypdf` pra confirmar que os dados chegaram no PDF final).
   em segundos (troca cm), remoção de Dinamometria/Termografia,
   observação na foto geral, destaque dourado + barra de assimetria na
   Revisão. Commit `a377fbc`.
-- **27/10/2026** — pendente: validação prática no tablet real antes de
-  um teste de avaliação ao vivo, incluindo câmera/vídeo em dispositivo
-  físico (só simulados até agora via Playwright com câmera falsa).
+- **27/10/2026** — novo PDF do paciente (visual do Fechamento de Repasses,
+  campos vazios omitidos), gráficos de evolução por data com histórico em
+  Google Sheets, upload e anexo do relatório do Kinology. Commits
+  `107298f` e `ec7664d`. Teste prático com pacientes na clínica no dia
+  28/10/2026.
 
 ## Pendências conhecidas
 
+- **Configurar o histórico (ação do Sergio):** `GOOGLE_AVALIACOES_SHEET_ID`
+  e `[gcp_service_account]` nos Secrets (local `.streamlit/secrets.toml` e
+  Streamlit Cloud). Até lá o histórico fica desativado. Depois, testar com a
+  planilha real: gravar uma avaliação e abrir uma reavaliação do mesmo paciente.
 - Validar no tablet físico de verdade: câmera, upload de vídeo, toque
   (scroll-avançar, botões de navegação) — só testado via Playwright/AppTest.
 - Layout fino do MMSS (reconstruído sem PDF limpo de referência) —

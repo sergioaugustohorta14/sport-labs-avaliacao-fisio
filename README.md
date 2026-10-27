@@ -57,6 +57,31 @@ filtra por nome no servidor — por isso a lista é buscada uma vez
 aparecem como sugestão, mas o campo aceita digitar o nome livremente
 nesse caso (nunca trava o preenchimento).
 
+## Histórico e gráficos de evolução (Google Sheets)
+
+Ao gerar o PDF, o app grava os **testes medidos** (força, amplitude,
+saltos, equilíbrio, tempos) numa planilha Google, e nas reavaliações do
+mesmo paciente o PDF ganha gráficos de evolução data a data. Dados do
+paciente, dor, fotos e vídeo não vão pra planilha. Sem a configuração
+abaixo o app funciona normalmente, só sem os gráficos de evolução.
+
+1. Crie a planilha e compartilhe com o e-mail da conta de serviço do
+   Google como **Editor**.
+2. Nos Secrets (local e Streamlit Cloud), com a chave de nível raiz
+   **antes** de qualquer `[tabela]`:
+
+```toml
+GOOGLE_AVALIACOES_SHEET_ID = "id-da-planilha"
+
+[gcp_service_account]
+# conteúdo do JSON da conta de serviço (type, project_id, private_key, ...)
+```
+
+## Relatório do Kinology
+
+Na tela de Revisão, é possível enviar o PDF gerado no Kinology e escolher
+as páginas que entram no fim do PDF do paciente (sem alteração).
+
 ## Estrutura
 
 - `src/avaliacao_fisio/protocolos.py` — definição dos campos de cada
@@ -65,8 +90,12 @@ nesse caso (nunca trava o preenchimento).
   Risco, Responsável).
 - `src/avaliacao_fisio/wizard.py` — motor do wizard (navegação,
   formulários, coleta das respostas).
-- `src/avaliacao_fisio/pdf_avaliacao.py` — geração do PDF final
-  (reportlab).
+- `src/avaliacao_fisio/pdf_avaliacao.py`, `pdf_base.py`, `pdf_graficos.py`
+  — geração do PDF final (reportlab) e gráficos de evolução.
+- `src/avaliacao_fisio/historico.py`, `google_sheets_client.py` —
+  histórico das avaliações na planilha Google.
+- `src/avaliacao_fisio/pdf_anexos.py` — anexo de páginas do Kinology.
+- `src/avaliacao_fisio/assimetria.py` — regra de assimetria (10% / 20%).
 - `src/avaliacao_fisio/auth.py` — tela de login opcional (usuário/senha
   via Secrets).
 - `src/avaliacao_fisio/feegow_client.py` — busca de pacientes cadastrados
@@ -77,7 +106,7 @@ nesse caso (nunca trava o preenchimento).
 
 ## Escopo da v1
 
-Gera o **formulário preenchido** (dados brutos em tabela), sem texto
+Gera o **formulário preenchido** (campos vazios omitidos), sem texto
 interpretativo/diagnóstico. Uma camada narrativa (correlação clínica,
 diagnóstico cinético-funcional) é uma fase futura — só entra com
 confirmação explícita, não está neste escopo.
