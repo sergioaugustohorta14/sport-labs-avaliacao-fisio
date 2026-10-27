@@ -57,8 +57,8 @@ def _desenho(serie: list[dict], sentido: str | None, formatar: Callable) -> Draw
     area_h = _ALTURA_GRAFICO - base_y - 0.55 * cm
     n = len(serie)
     largura_grupo = largura / n
-    largura_barra = min(0.95 * cm, largura_grupo * 0.3)
-    folga = 0.12 * cm
+    largura_barra = min(0.5 * cm, largura_grupo * 0.17)
+    folga = 0.1 * cm
 
     desenho.add(Rect(0, base_y - 0.5, largura, 0.8, fillColor=colors.HexColor("#cfd6d3"), strokeColor=None))
 
@@ -71,7 +71,7 @@ def _desenho(serie: list[dict], sentido: str | None, formatar: Callable) -> Draw
                 continue
             altura = max(area_h * (valor / maior), 0.12 * cm)
             cor = _cor_barra(lado, ponto.get("D"), ponto.get("E"), sentido)
-            desenho.add(Rect(x_barras[lado], base_y, largura_barra, altura, fillColor=cor, strokeColor=None, rx=2, ry=2))
+            desenho.add(Rect(x_barras[lado], base_y, largura_barra, altura, fillColor=cor, strokeColor=None, rx=1.5, ry=1.5))
             desenho.add(String(
                 x_barras[lado] + largura_barra / 2, base_y + altura + 3, formatar(valor), fontName="Helvetica-Bold",
                 fontSize=7.5, fillColor=colors.HexColor("#4a4a46") if cor == pdf_base.COR_NEUTRO_BARRA else cor,
@@ -79,8 +79,8 @@ def _desenho(serie: list[dict], sentido: str | None, formatar: Callable) -> Draw
             ))
             if altura > 0.5 * cm:
                 desenho.add(String(
-                    x_barras[lado] + largura_barra / 2, base_y + 0.14 * cm, lado, fontName="Helvetica-Bold",
-                    fontSize=7.5, fillColor=colors.white, textAnchor="middle",
+                    x_barras[lado] + largura_barra / 2, base_y + 0.12 * cm, lado, fontName="Helvetica-Bold",
+                    fontSize=6.5, fillColor=colors.white, textAnchor="middle",
                 ))
         desenho.add(String(
             centro, 0.1 * cm, data_curta(ponto["data"]), fontName="Helvetica", fontSize=7.5,
@@ -175,7 +175,7 @@ class EscalaEVA(Flowable):
     o valor da dor. Desenhada direto no canvas (gradiente e recorte arredondado)."""
 
     LARGURA = 12.4 * cm
-    ALTURA = 1.75 * cm
+    ALTURA = 1.35 * cm
     _MARGEM_LATERAL = 1.45 * cm
 
     def __init__(self, valor: float):
@@ -191,7 +191,7 @@ class EscalaEVA(Flowable):
         escuro = pdf_base.COR_ESCURO
         x0 = self._MARGEM_LATERAL
         larg = self.LARGURA - 2 * self._MARGEM_LATERAL
-        y0, alt = 0.12 * cm, 0.55 * cm
+        y0, alt = 0.18 * cm, 0.3 * cm
         raio = alt / 2
 
         c.saveState()
@@ -210,27 +210,27 @@ class EscalaEVA(Flowable):
         c.setLineWidth(0.5)
         for i in range(11):
             x = x0 + larg * i / 10
-            c.line(x, topo_barra + 0.1 * cm, x, topo_barra + 0.22 * cm)
+            c.line(x, topo_barra + 0.07 * cm, x, topo_barra + 0.16 * cm)
 
         c.setFillColor(escuro)
-        c.setFont("Helvetica-Bold", 9)
-        c.drawCentredString(x0, topo_barra + 0.36 * cm, "0")
-        c.drawCentredString(x0 + larg, topo_barra + 0.36 * cm, "10")
+        c.setFont("Helvetica-Bold", 8)
+        c.drawCentredString(x0, topo_barra + 0.3 * cm, "0")
+        c.drawCentredString(x0 + larg, topo_barra + 0.3 * cm, "10")
 
-        c.setFont("Helvetica-Oblique", 7)
+        c.setFont("Helvetica-Oblique", 6.5)
         c.setFillColor(pdf_base.COR_RODAPE)
-        c.drawRightString(x0 - 0.2 * cm, y0 + 0.34 * cm, "Sem")
-        c.drawRightString(x0 - 0.2 * cm, y0 + 0.04 * cm, "Dor")
-        c.drawString(x0 + larg + 0.2 * cm, y0 + 0.34 * cm, "Máximo")
-        c.drawString(x0 + larg + 0.2 * cm, y0 + 0.04 * cm, "de Dor")
+        c.drawRightString(x0 - 0.2 * cm, y0 + 0.2 * cm, "Sem")
+        c.drawRightString(x0 - 0.2 * cm, y0 - 0.03 * cm, "Dor")
+        c.drawString(x0 + larg + 0.2 * cm, y0 + 0.2 * cm, "Máximo")
+        c.drawString(x0 + larg + 0.2 * cm, y0 - 0.03 * cm, "de Dor")
 
         marcador_x = x0 + larg * self.valor / 10
-        meia_base = 0.2 * cm
+        meia_base = 0.15 * cm
         c.setFillColor(colors.HexColor("#111111"))
         triangulo = c.beginPath()
-        triangulo.moveTo(marcador_x - meia_base, topo_barra + 0.62 * cm)
-        triangulo.lineTo(marcador_x + meia_base, topo_barra + 0.62 * cm)
-        triangulo.lineTo(marcador_x, topo_barra + 0.14 * cm)
+        triangulo.moveTo(marcador_x - meia_base, topo_barra + 0.5 * cm)
+        triangulo.lineTo(marcador_x + meia_base, topo_barra + 0.5 * cm)
+        triangulo.lineTo(marcador_x, topo_barra + 0.1 * cm)
         triangulo.close()
         c.drawPath(triangulo, fill=1, stroke=0)
 
