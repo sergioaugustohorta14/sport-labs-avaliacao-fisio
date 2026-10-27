@@ -194,11 +194,13 @@ _LEGENDA_EVA = ParagraphStyle(
 
 class EscalaEVA(Flowable):
     """Escala Visual Analógica (0 a 10): barra em degradê (branco, azul, verde,
-    amarelo, vermelho, vinho), régua com 11 marcas e um triângulo preto apontando
-    o valor da dor. Desenhada direto no canvas (gradiente e recorte arredondado)."""
+    amarelo, vermelho, vinho) com um botão redondo no valor da dor e o número
+    numa etiqueta escura logo acima. O trecho depois do valor fica esmaecido
+    (como uma barra de progresso) e a régua 0 a 10 vai embaixo. Desenhada
+    direto no canvas (gradiente, transparência e recorte arredondado)."""
 
     LARGURA = 12.4 * cm
-    ALTURA = 1.35 * cm
+    ALTURA = 1.45 * cm
     _MARGEM_LATERAL = 1.45 * cm
 
     def __init__(self, valor: float):
@@ -214,48 +216,61 @@ class EscalaEVA(Flowable):
         escuro = pdf_base.COR_ESCURO
         x0 = self._MARGEM_LATERAL
         larg = self.LARGURA - 2 * self._MARGEM_LATERAL
-        y0, alt = 0.18 * cm, 0.3 * cm
-        raio = alt / 2
+        y0, alt = 0.5 * cm, 0.28 * cm
+        centro_y = y0 + alt / 2
+        marcador_x = x0 + larg * self.valor / 10
 
+        # Barra: degradê recortado em cápsula; depois do valor, véu branco translúcido.
         c.saveState()
         caminho = c.beginPath()
-        caminho.roundRect(x0, y0, larg, alt, raio)
+        caminho.roundRect(x0, y0, larg, alt, alt / 2)
         c.clipPath(caminho, stroke=0, fill=0)
         c.linearGradient(x0, 0, x0 + larg, 0, [colors.HexColor(h) for h in _CORES_EVA], _POSICOES_EVA)
+        if self.valor < 10:
+            c.setFillColor(colors.white, alpha=0.5)
+            c.rect(marcador_x, y0, x0 + larg - marcador_x, alt, stroke=0, fill=1)
         c.restoreState()
-
-        c.setStrokeColor(colors.HexColor("#c9c9c4"))
-        c.setLineWidth(0.6)
-        c.roundRect(x0, y0, larg, alt, raio, stroke=1, fill=0)
-
-        topo_barra = y0 + alt
-        c.setStrokeColor(escuro)
+        c.setStrokeColor(colors.HexColor("#d6d6d1"))
         c.setLineWidth(0.5)
-        for i in range(11):
-            x = x0 + larg * i / 10
-            c.line(x, topo_barra + 0.07 * cm, x, topo_barra + 0.16 * cm)
+        c.roundRect(x0, y0, larg, alt, alt / 2, stroke=1, fill=0)
 
-        c.setFillColor(escuro)
-        c.setFont("Helvetica-Bold", 8)
-        c.drawCentredString(x0, topo_barra + 0.3 * cm, "0")
-        c.drawCentredString(x0 + larg, topo_barra + 0.3 * cm, "10")
-
-        c.setFont("Helvetica-Oblique", 6.5)
+        # Régua 0 a 10 embaixo da barra.
+        c.setFont("Helvetica", 6.5)
         c.setFillColor(pdf_base.COR_RODAPE)
-        c.drawRightString(x0 - 0.2 * cm, y0 + 0.2 * cm, "Sem")
-        c.drawRightString(x0 - 0.2 * cm, y0 - 0.03 * cm, "Dor")
-        c.drawString(x0 + larg + 0.2 * cm, y0 + 0.2 * cm, "Máximo")
-        c.drawString(x0 + larg + 0.2 * cm, y0 - 0.03 * cm, "de Dor")
+        for i in range(11):
+            c.drawCentredString(x0 + larg * i / 10, y0 - 0.3 * cm, str(i))
 
-        marcador_x = x0 + larg * self.valor / 10
-        meia_base = 0.15 * cm
-        c.setFillColor(colors.HexColor("#111111"))
-        triangulo = c.beginPath()
-        triangulo.moveTo(marcador_x - meia_base, topo_barra + 0.5 * cm)
-        triangulo.lineTo(marcador_x + meia_base, topo_barra + 0.5 * cm)
-        triangulo.lineTo(marcador_x, topo_barra + 0.1 * cm)
-        triangulo.close()
-        c.drawPath(triangulo, fill=1, stroke=0)
+        # Legendas das pontas, centradas na altura da barra.
+        c.setFont("Helvetica-Oblique", 6.5)
+        c.drawRightString(x0 - 0.22 * cm, centro_y + 0.04 * cm, "Sem")
+        c.drawRightString(x0 - 0.22 * cm, centro_y - 0.18 * cm, "Dor")
+        c.drawString(x0 + larg + 0.22 * cm, centro_y + 0.04 * cm, "Máximo")
+        c.drawString(x0 + larg + 0.22 * cm, centro_y - 0.18 * cm, "de Dor")
+
+        # Botão do valor: sombra suave, miolo branco e aro escuro.
+        raio = 0.19 * cm
+        c.setFillColor(colors.Color(0, 0, 0, alpha=0.18))
+        c.circle(marcador_x + 0.4, centro_y - 0.9, raio, stroke=0, fill=1)
+        c.setFillColor(colors.white)
+        c.setStrokeColor(escuro)
+        c.setLineWidth(1.5)
+        c.circle(marcador_x, centro_y, raio, stroke=1, fill=1)
+
+        # Etiqueta com o número, com uma pontinha apontando pro botão.
+        largura_et, altura_et = 0.62 * cm, 0.36 * cm
+        base_et = centro_y + raio + 0.1 * cm
+        c.setFillColor(escuro)
+        c.roundRect(marcador_x - largura_et / 2, base_et, largura_et, altura_et, 0.1 * cm, stroke=0, fill=1)
+        ponta = c.beginPath()
+        ponta.moveTo(marcador_x - 0.07 * cm, base_et + 0.01 * cm)
+        ponta.lineTo(marcador_x + 0.07 * cm, base_et + 0.01 * cm)
+        ponta.lineTo(marcador_x, base_et - 0.07 * cm)
+        ponta.close()
+        c.drawPath(ponta, fill=1, stroke=0)
+        c.setFillColor(colors.white)
+        c.setFont("Helvetica-Bold", 8)
+        texto = f"{self.valor:g}"
+        c.drawCentredString(marcador_x, base_et + 0.105 * cm, texto)
 
 
 def escala_eva(valor: float, rotulo: str) -> list:
