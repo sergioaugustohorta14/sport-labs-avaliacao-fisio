@@ -83,16 +83,16 @@ def _cartao_paciente(dados: dict) -> Table:
 
     esporte = _partes(("Esporte", c("esporte_modalidade")), ("Membro dominante", c("membro_dominante")))
     if esporte:
-        linhas.append(("cartao", esporte))
+        linhas.append(("esporte", esporte))
     lesao = _partes(("Lesão / diagnóstico", c("lesao_diagnostico")), ("Local", c("local_lesao")))
     if lesao:
-        linhas.append(("cartao", lesao))
+        linhas.append(("lesao", lesao))
     datas_lesao = _partes(("Data da lesão", c("data_lesao")), ("Médico responsável", c("medico_responsavel")))
     if datas_lesao:
         linhas.append(("calendario", datas_lesao))
 
     data_av = pdf_base.data_br(dados.get("data_avaliacao"))
-    linhas.append(("calendario", f"<b>Avaliação:</b> {data_av} · {_esc(dados['tipo_avaliacao'])}"))
+    linhas.append(("avaliacao", f"<b>Avaliação:</b> {data_av} · {_esc(dados['tipo_avaliacao'])}"))
 
     risco = _campo(dados, "classificacao_risco", "risco")
     if risco in _FAIXA_DO_RISCO:

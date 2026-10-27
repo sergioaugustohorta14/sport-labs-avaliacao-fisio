@@ -84,7 +84,18 @@ def numero_br(valor, casas: int | None = None) -> str:
     return texto.replace(".", ",")
 
 
-def icone(tipo: str) -> Drawing:
+_ICONES_DIR = _ASSETS_DIR / "icones"
+# Ícones enviados pelo Sergio (27/10/2026), já na cor do PDF e com fundo transparente.
+_ICONES_PNG = {"esporte": "esporte.png", "lesao": "lesao.png", "avaliacao": "avaliacao.png"}
+
+
+def icone(tipo: str):
+    arquivo = _ICONES_PNG.get(tipo)
+    if arquivo and (_ICONES_DIR / arquivo).exists():
+        try:
+            return Image(str(_ICONES_DIR / arquivo), width=_TAM_ICONE * 1.3, height=_TAM_ICONE * 1.3, kind="proportional")
+        except Exception:
+            pass
     cor = COR_ESCURO
     t = _TAM_ICONE
     d = Drawing(t, t)
