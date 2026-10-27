@@ -67,7 +67,7 @@ def _desenho(serie: list[dict], sentido: str | None, formatar: Callable) -> Draw
     n = len(serie)
     largura_grupo = largura / n
     largura_barra = min(0.34 * cm, largura_grupo * 0.12)
-    folga = 0.12 * cm
+    folga = 0.36 * cm
 
     desenho.add(Line(0, base_y, largura, base_y, strokeColor=_LINHA_BASE, strokeWidth=0.5))
 
