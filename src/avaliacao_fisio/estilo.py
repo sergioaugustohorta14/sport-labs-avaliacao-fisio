@@ -144,7 +144,7 @@ def injetar_tema() -> None:
         cápsula completa e preenchimento sólido (referência de botão
         enviada pelo Sergio em 10/10/2026: pill cheio, não retângulo com
         cantos arredondados nem fundo transparente). */
-        .stButton button {{
+        .stButton button, div[data-testid="stDownloadButton"] button {{
             width: 100%;
             padding: 0.9rem 1rem;
             font-size: 1.05rem;
@@ -158,17 +158,17 @@ def injetar_tema() -> None:
         (span, div, acima) pinta o texto interno do botão (que o Streamlit
         envolve num elemento próprio) por cima da cor definida aqui — sem
         isso o texto ficava invisível num fundo também claro. */
-        .stButton button[kind="primary"] {{
+        .stButton button[kind="primary"], div[data-testid="stDownloadButton"] button[kind="primary"] {{
             background: {GRADIENTE_PRIMARIO};
             border: none;
             box-shadow: 0 0 18px {COR_GLOW};
         }}
-        .stButton button[kind="primary"],
-        .stButton button[kind="primary"] * {{
+        .stButton button[kind="primary"], div[data-testid="stDownloadButton"] button[kind="primary"],
+        .stButton button[kind="primary"] *, div[data-testid="stDownloadButton"] button[kind="primary"] * {{
             color: {COR_TEXTO_SOBRE_GRADIENTE} !important;
             font-weight: 700 !important;
         }}
-        .stButton button[kind="primary"]:hover {{
+        .stButton button[kind="primary"]:hover, div[data-testid="stDownloadButton"] button[kind="primary"]:hover {{
             box-shadow: 0 0 26px {COR_GLOW};
             filter: brightness(1.08);
         }}
@@ -176,15 +176,40 @@ def injetar_tema() -> None:
         isso "Iniciar Avaliação" ficava visualmente idêntico ao estado
         pronto pra clicar antes de escolher Protocolo/Tipo, e o clique
         não fazia nada (achado real, 09/10/2026). */
-        .stButton button[kind="primary"]:disabled {{
+        .stButton button[kind="primary"]:disabled, div[data-testid="stDownloadButton"] button[kind="primary"]:disabled {{
             background: {COR_SURFACE} !important;
             box-shadow: none !important;
             opacity: 0.55;
             cursor: not-allowed;
         }}
-        .stButton button[kind="primary"]:disabled,
-        .stButton button[kind="primary"]:disabled * {{
+        .stButton button[kind="primary"]:disabled, div[data-testid="stDownloadButton"] button[kind="primary"]:disabled,
+        .stButton button[kind="primary"]:disabled *, div[data-testid="stDownloadButton"] button[kind="primary"]:disabled * {{
             color: {COR_MUTED} !important;
+        }}
+
+        /* Seletor de páginas do Kinology (st.multiselect) e caixa de marcar:
+        no tema padrão do Streamlit eram branco/cinza claro com etiquetas
+        vermelhas (achado real, 27/10/2026, inspecionando o DOM renderizado). */
+        div[data-testid="stMultiSelect"] [class*="react-aria-ComboBox"] > div {{
+            background-color: {COR_SURFACE} !important;
+            border: 1px solid {COR_BORDA} !important;
+            border-radius: 8px !important;
+        }}
+        div[data-testid="stMultiSelect"] [data-tag] {{
+            background-color: rgba(212, 175, 95, 0.20) !important;
+            border: 1px solid {COR_BORDA} !important;
+        }}
+        div[data-testid="stMultiSelect"] [data-tag],
+        div[data-testid="stMultiSelect"] [data-tag] * {{
+            color: {COR_TEXTO} !important;
+        }}
+        div[data-testid="stCheckbox"] label > span + div {{
+            background-color: {COR_SURFACE} !important;
+            border: 1px solid {COR_BORDA} !important;
+        }}
+        div[data-testid="stCheckbox"] label:has(input:checked) > span + div {{
+            background: {GRADIENTE_PRIMARIO} !important;
+            border-color: {COR_ACENTO} !important;
         }}
 
         /* Segmented control (Protocolo / Tipo de avaliação) — pill bar.
