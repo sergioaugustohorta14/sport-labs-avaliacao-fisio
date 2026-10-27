@@ -204,17 +204,36 @@ def _secao_repetivel(secao: dict) -> list:
     return [pdf_base.tabela(linhas, tuple(1 / len(colunas) for _ in colunas))]
 
 
-def _secao_dor(secao: dict) -> list:
+def _secao_dor(secao: dict, titulo: list) -> list:
+    """Devolve a seção COM o título (`titulo`): o título entra no mesmo bloco da escala
+    pra nunca ficar sozinho no fim de uma página."""
     repouso, atividade = secao["escala_repouso"], secao["escala_atividade"]
     locais = secao["locais"]
     if not locais and not repouso and not atividade:
         return []
     elementos: list = []
+    # Cartão + escala EVA num bloco só (com o título da seção, que fica junto por
+    # `keepWithNext`): a seção Dor não se parte entre duas páginas.
+    bloco_escala: list = []
     if repouso is not None or atividade is not None:
-        elementos.append(pdf_base.cartao_info([(
+        bloco_escala.append(pdf_base.cartao_info([(
             "ponto",
             f"<b>Escala de dor em repouso:</b> {repouso or 0} / 10 · <b>em atividade:</b> {atividade or 0} / 10",
         )]))
+    eva: list = []
+    for rotulo, valor in (("Em repouso", repouso), ("Em atividade", atividade)):
+        if valor is not None:
+            eva += pdf_graficos.escala_eva(valor, rotulo)
+    if eva:
+        titulo_eva = ParagraphStyle(
+            "TituloEva", parent=CELULA, fontSize=10.5, leading=13, alignment=1, fontName="Helvetica-Bold",
+            textColor=pdf_base.COR_ESCURO, spaceBefore=10, spaceAfter=2,
+        )
+        bloco_escala += [Paragraph("ESCALA VISUAL ANALÓGICA (EVA)", titulo_eva)] + eva
+    if bloco_escala:
+        elementos.append(KeepTogether(titulo + bloco_escala))
+    else:
+        elementos += titulo
     if locais:
         linhas = [[Paragraph(t, CELULA_CABECALHO) for t in ("Região", "Lado", "Intensidade")]]
         for local in locais:
@@ -351,7 +370,8 @@ def gerar(dados: dict, series: dict | None = None) -> bytes:
         elif secao["tipo"] == "repetivel":
             conteudo = _secao_repetivel(secao)
         elif secao["tipo"] == "dor":
-            conteudo = _secao_dor(secao)
+            elementos += _secao_dor(secao, pdf_base.titulo_secao(secao["titulo"]))
+            continue
         else:
             conteudo = _secao_fotos(secao)
         if conteudo:

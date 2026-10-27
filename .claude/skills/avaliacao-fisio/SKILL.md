@@ -217,6 +217,12 @@ importados) do Feegow-Analytics — os projetos são repositórios independentes
 - Tabela bilateral: Teste | Direito | Esquerdo | Assimetria (pílula pela faixa
   de `assimetria.py`). Tempo (prancha) usa `D_seg`/`E_seg` (segundos) pro cálculo.
 - `video_upload` **nunca entra no PDF** (reportlab não reproduz vídeo).
+- Dor: além do cartão e da tabela de locais, desenha a **Escala Visual Analógica (EVA)**,
+  uma barra em degradê (branco, azul, verde, amarelo, vermelho, vinho) por escala (em
+  repouso e em atividade) com um triângulo no valor 0 a 10 — `pdf_graficos.EscalaEVA`,
+  um `Flowable` que desenha direto no canvas (gradiente + recorte arredondado). Título
+  "Dor" + cartão + escala ficam num `KeepTogether` (o `keepWithNext` não prende o título
+  a um bloco agrupado, por isso o título entra DENTRO do bloco em `_secao_dor`).
 - Páginas depois da 1ª têm cabeçalho compacto (`BaseDocTemplate` com dois
   `PageTemplate`); título de seção usa `keepWithNext` (não fica órfão).
 - Nome do arquivo: `avaliacao_<protocolo_id>_<nome_paciente_sem_espaco>_<ddmmaaaa>.pdf`.

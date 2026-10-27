@@ -13,7 +13,7 @@ from reportlab.graphics.shapes import Drawing, Rect, String
 from reportlab.lib import colors
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import cm
-from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import Flowable, Paragraph, Spacer, Table, TableStyle
 
 from avaliacao_fisio import assimetria, pdf_base
 
@@ -127,20 +127,19 @@ def bloco(titulo: str, unidade: str | None, serie: list[dict], sentido: str | No
 
 
 def grade(blocos: list[Table]) -> list:
-    """Dois blocos por linha (uma linha nunca é cortada entre páginas)."""
-    if not blocos:
-        return []
+    """Dois blocos por linha. Cada linha é uma Table própria (nunca cortada entre
+    páginas), pra o conjunto fluir pelas páginas sem deixar grandes espaços vazios."""
     linhas = []
     for i in range(0, len(blocos), 2):
         par = blocos[i:i + 2]
-        linhas.append([par[0], "", par[1] if len(par) > 1 else ""])
-    t = Table(linhas, colWidths=[_LARGURA_CARD, _GAP, _LARGURA_CARD])
-    t.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-        ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 14),
-    ]))
-    return [t]
+        t = Table([[par[0], "", par[1] if len(par) > 1 else ""]], colWidths=[_LARGURA_CARD, _GAP, _LARGURA_CARD])
+        t.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 14),
+        ]))
+        linhas.append(t)
+    return linhas
 
 
 def legenda() -> list:
@@ -157,3 +156,85 @@ def legenda() -> list:
         "não destacam nenhum lado."
     )
     return [Spacer(1, 0.1 * cm), Paragraph(texto, _LEGENDA)]
+
+
+# --------------------------------------------------------------------------- escala visual analógica (dor)
+_CORES_EVA = [
+    "#ffffff", "#bfe6fb", "#2f9bf0", "#2fb34a", "#c8d82d", "#ffe600", "#ff8f00", "#e0262d", "#7a0f2e",
+]
+_POSICOES_EVA = [0, 0.12, 0.22, 0.42, 0.52, 0.60, 0.72, 0.85, 1.0]
+_LEGENDA_EVA = ParagraphStyle(
+    "LegendaEva", parent=pdf_base.ESTILO_NORMAL, fontSize=8.5, textColor=pdf_base.COR_ESCURO,
+    fontName="Helvetica-Bold", alignment=1, spaceBefore=4, spaceAfter=0,
+)
+
+
+class EscalaEVA(Flowable):
+    """Escala Visual Analógica (0 a 10): barra em degradê (branco, azul, verde,
+    amarelo, vermelho, vinho), régua com 11 marcas e um triângulo preto apontando
+    o valor da dor. Desenhada direto no canvas (gradiente e recorte arredondado)."""
+
+    LARGURA = 12.4 * cm
+    ALTURA = 1.75 * cm
+    _MARGEM_LATERAL = 1.45 * cm
+
+    def __init__(self, valor: float):
+        super().__init__()
+        self.valor = max(0.0, min(10.0, float(valor)))
+        self.hAlign = "CENTER"
+
+    def wrap(self, largura_disponivel, altura_disponivel):
+        return self.LARGURA, self.ALTURA
+
+    def draw(self):
+        c = self.canv
+        escuro = pdf_base.COR_ESCURO
+        x0 = self._MARGEM_LATERAL
+        larg = self.LARGURA - 2 * self._MARGEM_LATERAL
+        y0, alt = 0.12 * cm, 0.55 * cm
+        raio = alt / 2
+
+        c.saveState()
+        caminho = c.beginPath()
+        caminho.roundRect(x0, y0, larg, alt, raio)
+        c.clipPath(caminho, stroke=0, fill=0)
+        c.linearGradient(x0, 0, x0 + larg, 0, [colors.HexColor(h) for h in _CORES_EVA], _POSICOES_EVA)
+        c.restoreState()
+
+        c.setStrokeColor(colors.HexColor("#c9c9c4"))
+        c.setLineWidth(0.6)
+        c.roundRect(x0, y0, larg, alt, raio, stroke=1, fill=0)
+
+        topo_barra = y0 + alt
+        c.setStrokeColor(escuro)
+        c.setLineWidth(0.5)
+        for i in range(11):
+            x = x0 + larg * i / 10
+            c.line(x, topo_barra + 0.1 * cm, x, topo_barra + 0.22 * cm)
+
+        c.setFillColor(escuro)
+        c.setFont("Helvetica-Bold", 9)
+        c.drawCentredString(x0, topo_barra + 0.36 * cm, "0")
+        c.drawCentredString(x0 + larg, topo_barra + 0.36 * cm, "10")
+
+        c.setFont("Helvetica-Oblique", 7)
+        c.setFillColor(pdf_base.COR_RODAPE)
+        c.drawRightString(x0 - 0.2 * cm, y0 + 0.34 * cm, "Sem")
+        c.drawRightString(x0 - 0.2 * cm, y0 + 0.04 * cm, "Dor")
+        c.drawString(x0 + larg + 0.2 * cm, y0 + 0.34 * cm, "Máximo")
+        c.drawString(x0 + larg + 0.2 * cm, y0 + 0.04 * cm, "de Dor")
+
+        marcador_x = x0 + larg * self.valor / 10
+        meia_base = 0.2 * cm
+        c.setFillColor(colors.HexColor("#111111"))
+        triangulo = c.beginPath()
+        triangulo.moveTo(marcador_x - meia_base, topo_barra + 0.62 * cm)
+        triangulo.lineTo(marcador_x + meia_base, topo_barra + 0.62 * cm)
+        triangulo.lineTo(marcador_x, topo_barra + 0.14 * cm)
+        triangulo.close()
+        c.drawPath(triangulo, fill=1, stroke=0)
+
+
+def escala_eva(valor: float, rotulo: str) -> list:
+    """Legenda ("Em repouso", "Em atividade") + a escala com o marcador em `valor`."""
+    return [Paragraph(rotulo, _LEGENDA_EVA), EscalaEVA(valor)]
