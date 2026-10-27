@@ -380,10 +380,7 @@ _CORRIDA_RUNSCRIBE = SecaoCorrida(
         _metrica_corrida("impact_gs", "Impacto", "G", 1),
         _metrica_corrida("braking_gs", "Frenagem", "G", 1),
         _metrica_corrida("pronation_excursion_fs_mp", "Excursão de pronação", "°", 1),
-        _metrica_corrida("max_pronation_velocity", "Velocidade máxima de pronação", "°/s", 0),
         _metrica_corrida("footstrike_type", "Tipo de pisada (índice)", "", 1),
-        _metrica_corrida("kleg", "Rigidez da perna", "kN/m", 1),
-        _metrica_corrida("kvert", "Rigidez vertical", "kN/m", 1),
     ),
 )
 

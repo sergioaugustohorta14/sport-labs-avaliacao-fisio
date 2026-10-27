@@ -281,9 +281,11 @@ diretoria liberando o uso da conta da clínica.
   nulo e é ignorado. Todas as corridas estão com `calibration: "required"`
   (valores sem calibração no RunScribe; conferir com a equipe).
 - **Modelo:** `SecaoCorrida` (subclasse de `Secao`) com campos `bilateral_numero`
-  cujo `id` é o nome da métrica na API (`step_rate`, `contact_time`, `power`,
-  `shock`, `impact_gs`, `braking_gs`, `pronation_excursion_fs_mp`,
-  `max_pronation_velocity`, `footstrike_type`, `kleg`, `kvert`...) + resumo
+  cujo `id` é o nome da métrica na API. **Métricas impressas (definidas pela equipe
+  em 27/10/2026, 10 no total):** `step_rate`, `stride_length`, `contact_time`,
+  `flight_ratio`, `power`, `shock`, `impact_gs`, `braking_gs`,
+  `pronation_excursion_fs_mp` e `footstrike_type`. Ficaram de fora
+  `max_pronation_velocity`, `kleg` e `kvert` (a API as devolve; reativar = 1 linha) + resumo
   (corrida analisada, distância, duração, passos). Direito (D) = pé direito,
   esquerdo (E) = pé esquerdo. Por serem campos bilaterais comuns, a tabela com
   assimetria, o histórico em planilha e os gráficos de evolução funcionam sem
@@ -291,9 +293,11 @@ diretoria liberando o uso da conta da clínica.
   uma = 1 linha em `_CORRIDA_RUNSCRIBE`).
 - **`Campo.risco=False`** nas métricas de corrida: a assimetria aparece só como
   número (pílula neutra), sem a cor de "chance de lesão". As faixas de 10%/20%
-  foram definidas pra testes de força; **faixas de risco da corrida dependem do
-  critério da equipe** (pendente). Barra de assimetria da Revisão também só pra
-  `risco=True`. `sentido=None`: nenhum lado é destacado no gráfico.
+  foram definidas pra testes de força. **Decisão da especialista técnica da equipe
+  (27/10/2026): na corrida não há direção, limites nem faixas de referência, só os
+  números** — por isso fica `risco=False`/`sentido=None` (a assimetria sai como %
+  neutro; se quiserem tirar até esse %, é só esconder a coluna). Barra de
+  assimetria da Revisão também só pra `risco=True`.
 - **Tela** (`renderizar_secao_corrida`): lista as corridas cuja etiqueta casa com
   o nome do paciente (`_casa_nome`: palavras de um lado contidas no outro, sem
   acento); sem casamento mostra todas, da mais recente pra mais antiga. Ao
@@ -443,8 +447,7 @@ wrapper próprio (`stDownloadButton`) e não herda o CSS de `.stButton`.
 ## Pendências conhecidas
 
 - **Corrida (RunScribe):** repetir `RUNSCRIBE_EMAIL`/`RUNSCRIBE_PASSWORD` nos
-  Secrets do Streamlit Cloud (no topo, antes dos blocos); validar com a equipe
-  quais métricas imprimir e as faixas de referência/risco da corrida; fase 2 =
+  Secrets do Streamlit Cloud (feito em 27/10/2026); fase 2 =
   gráficos das métricas ao longo da corrida (séries) e a pegada (`shoe_print`);
   corridas ainda com `calibration: "required"`.
 
