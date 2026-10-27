@@ -309,7 +309,7 @@ def _assinaturas(dados: dict) -> list:
         colWidths=[LARGURA_UTIL / 2, LARGURA_UTIL / 2],
     )
     t.setStyle(TableStyle([("ALIGN", (0, 0), (-1, -1), "CENTER"), ("FONTSIZE", (0, 0), (-1, -1), 9), ("TOPPADDING", (0, 1), (-1, 1), 4)]))
-    return [KeepTogether([Spacer(1, 1.6 * cm), t])]
+    return [KeepTogether([Spacer(1, 3.4 * cm), t])]
 
 
 def _cabecalho_demais_paginas(nome_paciente: str, protocolo: str):
