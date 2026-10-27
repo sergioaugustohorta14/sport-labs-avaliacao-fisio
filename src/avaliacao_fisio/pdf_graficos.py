@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from reportlab.graphics.shapes import Drawing, Rect, String
+from reportlab.graphics.shapes import Drawing, Line, Rect, String
 from reportlab.lib import colors
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import cm
@@ -37,13 +37,22 @@ def _padrao(valor) -> str:
     return pdf_base.numero_br(valor)
 
 
-def _cor_barra(lado: str, d, e, sentido: str | None):
-    """Cor da barra do lado `lado`: o lado mais fraco leva a cor da faixa de
-    risco; o outro (e os dois, sem direção clara) ficam neutros."""
+# Tons mais suaves que os da tabela de assimetria: o gráfico é só um apoio visual.
+_CINZA_BARRA = colors.HexColor("#cdd5d1")
+_BARRA_FAIXA = {
+    assimetria.BAIXA: colors.HexColor("#52b788"),
+    assimetria.MEDIA: colors.HexColor("#f4b942"),
+    assimetria.ALTA: colors.HexColor("#e4624f"),
+}
+_TEXTO_SUAVE = colors.HexColor("#6f6f6a")
+_LINHA_BASE = colors.HexColor("#dfe3e0")
+
+
+def _faixa_do_lado_fraco(lado: str, d, e, sentido: str | None) -> str | None:
+    """Faixa de risco se `lado` é o mais fraco (leva cor); None nos demais (cinza)."""
     if assimetria.lado_mais_fraco(d, e, sentido) != lado:
-        return pdf_base.COR_NEUTRO_BARRA
-    pct = assimetria.percentual(d, e)
-    return pdf_base.CORES_FAIXA[assimetria.faixa(pct)][0]
+        return None
+    return assimetria.faixa(assimetria.percentual(d, e))
 
 
 def _desenho(serie: list[dict], sentido: str | None, formatar: Callable) -> Drawing:
@@ -53,62 +62,76 @@ def _desenho(serie: list[dict], sentido: str | None, formatar: Callable) -> Draw
     maior = max(valores) if valores else 1
     if maior <= 0:
         maior = 1
-    base_y = 0.62 * cm
-    area_h = _ALTURA_GRAFICO - base_y - 0.55 * cm
+    base_y = 0.95 * cm
+    area_h = _ALTURA_GRAFICO - base_y - 0.5 * cm
     n = len(serie)
     largura_grupo = largura / n
-    largura_barra = min(0.5 * cm, largura_grupo * 0.17)
-    folga = 0.1 * cm
+    largura_barra = min(0.34 * cm, largura_grupo * 0.12)
+    folga = 0.12 * cm
 
-    desenho.add(Rect(0, base_y - 0.5, largura, 0.8, fillColor=colors.HexColor("#cfd6d3"), strokeColor=None))
+    desenho.add(Line(0, base_y, largura, base_y, strokeColor=_LINHA_BASE, strokeWidth=0.5))
 
     for i, ponto in enumerate(serie):
         centro = largura_grupo * (i + 0.5)
         x_barras = {"D": centro - folga / 2 - largura_barra, "E": centro + folga / 2}
         for lado in ("D", "E"):
             valor = ponto.get(lado)
+            meio = x_barras[lado] + largura_barra / 2
+            desenho.add(String(
+                meio, base_y - 0.3 * cm, lado, fontName="Helvetica", fontSize=6.5, fillColor=_TEXTO_SUAVE, textAnchor="middle",
+            ))
             if valor is None:
                 continue
             altura = max(area_h * (valor / maior), 0.12 * cm)
-            cor = _cor_barra(lado, ponto.get("D"), ponto.get("E"), sentido)
-            desenho.add(Rect(x_barras[lado], base_y, largura_barra, altura, fillColor=cor, strokeColor=None, rx=1.5, ry=1.5))
+            faixa = _faixa_do_lado_fraco(lado, ponto.get("D"), ponto.get("E"), sentido)
+            cor = _BARRA_FAIXA[faixa] if faixa else _CINZA_BARRA
+            raio = min(largura_barra / 2, altura / 2)
+            desenho.add(Rect(x_barras[lado], base_y, largura_barra, altura, fillColor=cor, strokeColor=None, rx=raio, ry=raio))
+            # Valor em negrito e na cor do risco só no lado fraco; nos demais, cinza discreto.
             desenho.add(String(
-                x_barras[lado] + largura_barra / 2, base_y + altura + 3, formatar(valor), fontName="Helvetica-Bold",
-                fontSize=7.5, fillColor=colors.HexColor("#4a4a46") if cor == pdf_base.COR_NEUTRO_BARRA else cor,
-                textAnchor="middle",
+                meio, base_y + altura + 3, formatar(valor),
+                fontName="Helvetica-Bold" if faixa else "Helvetica", fontSize=7,
+                fillColor=pdf_base.CORES_FAIXA[faixa][2] if faixa else _TEXTO_SUAVE, textAnchor="middle",
             ))
-            if altura > 0.5 * cm:
-                desenho.add(String(
-                    x_barras[lado] + largura_barra / 2, base_y + 0.12 * cm, lado, fontName="Helvetica-Bold",
-                    fontSize=6.5, fillColor=colors.white, textAnchor="middle",
-                ))
         desenho.add(String(
-            centro, 0.1 * cm, data_curta(ponto["data"]), fontName="Helvetica", fontSize=7.5,
+            centro, 0.12 * cm, data_curta(ponto["data"]), fontName="Helvetica", fontSize=7,
             fillColor=colors.HexColor("#4a4a46"), textAnchor="middle",
         ))
     return desenho
 
 
 def _tabela_valores(serie: list[dict], formatar: Callable) -> Table:
-    # Sem a unidade em cada célula: ela já está no título do gráfico.
+    """Tabela leve: cabeçalho claro, sem zebra, só uma linha fina entre as datas.
+    Sem a unidade em cada célula: ela já está no título do gráfico."""
+
     def texto_valor(v) -> str:
         return formatar(v) if v is not None else ""
 
-    cab = pdf_base.CELULA_CABECALHO_PEQUENA
+    cab = ParagraphStyle("CabLeve", parent=pdf_base.CELULA_CABECALHO_PEQUENA, textColor=pdf_base.COR_ESCURO)
+    cel = ParagraphStyle("CelLeve", parent=pdf_base.CELULA, fontSize=8, leading=10)
     linhas = [[Paragraph("Data", cab), Paragraph("Direito", cab), Paragraph("Esquerdo", cab), Paragraph("Assimetria", cab)]]
     for ponto in serie:
         pct = assimetria.percentual(ponto.get("D"), ponto.get("E"))
         if pct is None:
             texto_pct = ""
         else:
-            cor = pdf_base.CORES_FAIXA[assimetria.faixa(pct)][0].hexval()[2:]
+            cor = pdf_base.CORES_FAIXA[assimetria.faixa(pct)][2].hexval()[2:]
             texto_pct = f'<font color="#{cor}"><b>{pdf_base.numero_br(pct, 1)}%</b></font>'
         linhas.append([
-            Paragraph(data_curta(ponto["data"]), pdf_base.CELULA), Paragraph(texto_valor(ponto.get("D")), pdf_base.CELULA),
-            Paragraph(texto_valor(ponto.get("E")), pdf_base.CELULA), Paragraph(texto_pct, pdf_base.CELULA),
+            Paragraph(data_curta(ponto["data"]), cel), Paragraph(texto_valor(ponto.get("D")), cel),
+            Paragraph(texto_valor(ponto.get("E")), cel), Paragraph(texto_pct, cel),
         ])
-    apertado = [("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4)]
-    return pdf_base.tabela(linhas, (0.23, 0.24, 0.25, 0.28), extra=apertado, largura=_LARGURA_CARD)
+    t = Table(linhas, colWidths=[_LARGURA_CARD * f for f in (0.23, 0.24, 0.25, 0.28)])
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), pdf_base.COR_CARD),
+        ("LINEBELOW", (0, 1), (-1, -2), 0.3, pdf_base.COR_GRADE),
+        ("BOX", (0, 0), (-1, -1), 0.4, pdf_base.COR_GRADE),
+        ("ROUNDEDCORNERS", [6, 6, 6, 6]),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5), ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 3.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 3.5),
+    ]))
+    return t
 
 
 def bloco(titulo: str, unidade: str | None, serie: list[dict], sentido: str | None, formatar: Callable | None = None) -> Table:
