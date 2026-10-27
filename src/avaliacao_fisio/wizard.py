@@ -20,11 +20,12 @@ from __future__ import annotations
 import datetime as dt
 import html
 import time
+import uuid
 
 import streamlit as st
 import streamlit.components.v1 as components
 
-from avaliacao_fisio import estilo, feegow_client, pdf_avaliacao
+from avaliacao_fisio import assimetria, estilo, feegow_client, historico, pdf_anexos, pdf_avaliacao
 from avaliacao_fisio.protocolos import (
     PROTOCOLO_MMII,
     PROTOCOLO_MMSS,
@@ -105,6 +106,12 @@ def _formatar_tempo(minutos, segundos) -> str | None:
     if minutos is None and segundos is None:
         return None
     return f"{int(minutos or 0)}'{int(segundos or 0):02d}\""
+
+
+def _segundos(minutos, segundos) -> int | None:
+    if minutos is None and segundos is None:
+        return None
+    return int(minutos or 0) * 60 + int(segundos or 0)
 
 
 def _rolar_offset(identificador: str, pixels: int = 220) -> None:
@@ -456,9 +463,12 @@ def _ler_campo(secao_id: str, campo: Campo):
 
     if campo.tipo == "bilateral_tempo":
         chave_d, chave_e = _chave(secao_id, campo.id, "D"), _chave(secao_id, campo.id, "E")
+        d_min, d_seg = respostas.get(f"{chave_d}_min"), respostas.get(f"{chave_d}_seg")
+        e_min, e_seg = respostas.get(f"{chave_e}_min"), respostas.get(f"{chave_e}_seg")
+        # "D_seg"/"E_seg": o mesmo tempo em segundos, pra calcular assimetria e histórico.
         return {
-            "D": _formatar_tempo(respostas.get(f"{chave_d}_min"), respostas.get(f"{chave_d}_seg")),
-            "E": _formatar_tempo(respostas.get(f"{chave_e}_min"), respostas.get(f"{chave_e}_seg")),
+            "D": _formatar_tempo(d_min, d_seg), "E": _formatar_tempo(e_min, e_seg),
+            "D_seg": _segundos(d_min, d_seg), "E_seg": _segundos(e_min, e_seg),
         }
     if campo.tipo == "unico_tempo":
         return _formatar_tempo(respostas.get(f"{chave}_min"), respostas.get(f"{chave}_seg"))
@@ -480,6 +490,7 @@ def _ler_campo(secao_id: str, campo: Campo):
 def coletar_respostas(protocolo: Protocolo) -> dict:
     respostas = st.session_state.get("respostas", {})
     dados: dict = {
+        "id_avaliacao": st.session_state.get("id_avaliacao") or uuid.uuid4().hex[:12],
         "protocolo_id": protocolo.id,
         "protocolo_nome": protocolo.nome,
         "tipo_avaliacao": st.session_state.get("tipo_avaliacao", "Nova avaliação"),
@@ -539,6 +550,7 @@ def coletar_respostas(protocolo: Protocolo) -> dict:
                 "campos": campos_saida, "definicao": secao,
             })
 
+    dados["paciente"] = historico.identificar_paciente(respostas.get(_chave("dados_paciente", "nome_completo")))
     return dados
 
 
@@ -570,19 +582,11 @@ def _barra_assimetria(d, e) -> str | None:
     clínica (abaixo de 10% baixa chance de lesão, 10–20% média, acima de
     20% alta), colada pelo Sergio em 13/10/2026. Só aparece na tela de
     Revisão, quando os dois lados têm valor numérico preenchido."""
-    if not isinstance(d, (int, float)) or not isinstance(e, (int, float)):
+    pct = assimetria.percentual(d, e)
+    if pct is None:
         return None
-    maior = max(abs(d), abs(e))
-    if maior == 0:
-        return None
-    assimetria = abs(d - e) / maior * 100
-    posicao = min(assimetria, 40) / 40 * 100
-    if assimetria < 10:
-        risco = "baixa chance de lesão"
-    elif assimetria < 20:
-        risco = "média chance de lesão"
-    else:
-        risco = "alta chance de lesão"
+    posicao = min(pct, 40) / 40 * 100
+    risco = assimetria.ROTULO_CHANCE[assimetria.faixa(pct)]
     return f"""
     <div style="margin:2px 0 12px; max-width:320px;">
         <div style="position:relative; height:10px; border-radius:6px; margin-top:14px;
@@ -590,15 +594,15 @@ def _barra_assimetria(d, e) -> str | None:
             <div style="position:absolute; left:calc({posicao:.1f}% - 7px); top:-14px; font-size:13px;">▼</div>
         </div>
         <div style="font-size:0.75rem; color:{estilo.COR_MUTED}; margin-top:2px;">
-            Assimetria: {assimetria:.1f}% — {risco}
+            Assimetria: {pct:.1f}% · {risco}
         </div>
     </div>
     """
 
 
-def _nome_arquivo(dados: dict, nome_paciente: str) -> str:
+def _nome_arquivo(dados: dict) -> str:
     data_av = dados.get("data_avaliacao") or dt.date.today()
-    nome_limpo = "_".join(nome_paciente.strip().split()) or "paciente"
+    nome_limpo = "_".join(dados["paciente"]["nome"].split()) or "paciente"
     return f"avaliacao_{dados['protocolo_id']}_{nome_limpo}_{data_av.strftime('%d%m%Y')}.pdf"
 
 
@@ -641,8 +645,80 @@ def _passo_selecao_protocolo() -> None:
         st.session_state["protocolo_id"] = protocolo_id
         st.session_state["tipo_avaliacao"] = tipo_opcao
         st.session_state["data_avaliacao"] = dt.date.today()
+        st.session_state["id_avaliacao"] = uuid.uuid4().hex[:12]
         st.session_state["etapa"] = 1
         st.rerun()
+
+
+@st.cache_data(show_spinner=False)
+def _analisar_kinology(pdf_bytes: bytes):
+    return pdf_anexos.analisar(pdf_bytes)
+
+
+def _bloco_kinology() -> tuple[bytes | None, list[int]]:
+    """Upload do PDF do Kinology + escolha das páginas que serão anexadas ao
+    PDF final. Devolve (bytes, páginas escolhidas) ou (None, [])."""
+    st.markdown("### Relatório do Kinology (opcional)")
+    st.caption(
+        "Envie o PDF gerado no Kinology e escolha as páginas que entram no final do PDF do paciente. "
+        "As páginas são anexadas sem alteração."
+    )
+    arquivo = st.file_uploader("PDF do Kinology", type=["pdf"], key="w__kinology_pdf")
+    if arquivo is not None:
+        st.session_state["kinology_bytes"] = arquivo.getvalue()
+        st.session_state["kinology_nome"] = arquivo.name
+    pdf_bytes = st.session_state.get("kinology_bytes")
+    if not pdf_bytes:
+        return None, []
+    if arquivo is None:
+        st.caption(f"Arquivo já enviado nesta sessão: {st.session_state.get('kinology_nome', 'Kinology.pdf')}")
+
+    try:
+        paginas = _analisar_kinology(pdf_bytes)
+    except ValueError as erro:
+        st.error(str(erro))
+        return None, []
+    if not pdf_anexos.parece_kinology(pdf_bytes):
+        st.warning("Este PDF não parece ser do Kinology. As páginas escolhidas serão anexadas mesmo assim.")
+
+    n_curvas = sum(p.e_curva for p in paginas)
+    incluir_curvas = False
+    if n_curvas:
+        incluir_curvas = st.checkbox(
+            f"Incluir as {n_curvas} páginas de curvas brutas (Dinâmica e Desempenho Muscular)",
+            value=False, key="w__kinology_curvas",
+        )
+    escolhidas = st.multiselect(
+        "Páginas que entram no PDF",
+        options=[p.numero for p in paginas],
+        default=pdf_anexos.paginas_padrao(paginas, incluir_curvas),
+        format_func=lambda n: paginas[n - 1].rotulo,
+        key=f"w__kinology_paginas_{int(incluir_curvas)}",
+    )
+    st.caption(f"{len(escolhidas)} de {len(paginas)} páginas do Kinology serão anexadas.")
+    return pdf_bytes, sorted(escolhidas)
+
+
+def _gerar_pdf_final(dados: dict, kinology_bytes: bytes | None, kinology_paginas: list[int]) -> tuple[bytes, list[str]]:
+    """PDF da avaliação (+ gráficos de evolução do histórico + páginas do
+    Kinology). Falha do histórico (planilha fora do ar, credencial errada)
+    NUNCA impede o PDF: sai sem evolução e com um aviso."""
+    avisos: list[str] = []
+    series = None
+    if historico.configurado():
+        try:
+            series = historico.series_do_paciente(historico.carregar(), dados)
+        except Exception:
+            avisos.append("Não consegui ler o histórico do paciente: o PDF saiu sem os gráficos de evolução.")
+        try:
+            historico.salvar(dados, st.session_state.get("usuario_logado", ""))
+        except Exception:
+            avisos.append("Não consegui salvar esta avaliação no histórico: ela não aparecerá nas próximas evoluções.")
+
+    pdf = pdf_avaliacao.gerar(dados, series)
+    if kinology_bytes and kinology_paginas:
+        pdf = pdf_anexos.anexar(pdf, kinology_bytes, kinology_paginas)
+    return pdf, avisos
 
 
 def _passo_revisao(protocolo: Protocolo) -> None:
@@ -697,9 +773,13 @@ def _passo_revisao(protocolo: Protocolo) -> None:
                     st.write("Nenhuma foto registrada.")
 
     st.divider()
+    kinology_bytes, kinology_paginas = _bloco_kinology()
+    st.divider()
 
     if not nome_paciente:
         st.warning("Preencha o nome completo do paciente (seção Dados do Paciente) para gerar o PDF.")
+    if not historico.configurado():
+        st.caption("Histórico de evolução desativado: a planilha do Google ainda não está configurada neste ambiente.")
 
     col_voltar, col_gerar = st.columns(2)
     with col_voltar:
@@ -708,10 +788,14 @@ def _passo_revisao(protocolo: Protocolo) -> None:
             st.rerun()
     with col_gerar:
         if st.button("Gerar PDF", key="gerar_pdf", type="primary", disabled=not nome_paciente):
-            st.session_state["pdf_bytes"] = pdf_avaliacao.gerar(dados)
-            st.session_state["pdf_nome_arquivo"] = _nome_arquivo(dados, nome_paciente)
+            st.session_state["pdf_bytes"], st.session_state["avisos_pdf"] = _gerar_pdf_final(
+                dados, kinology_bytes, kinology_paginas,
+            )
+            st.session_state["pdf_nome_arquivo"] = _nome_arquivo(dados)
 
     if st.session_state.get("pdf_bytes"):
+        for aviso in st.session_state.get("avisos_pdf", []):
+            st.warning(aviso)
         st.success("PDF gerado! Baixe abaixo e abra no visualizador do tablet para imprimir.")
         st.download_button(
             "⬇ Baixar PDF",

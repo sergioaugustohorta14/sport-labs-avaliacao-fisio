@@ -44,6 +44,11 @@ class Campo:
     opcoes: tuple[str, ...] | None = None
     ajuda: str | None = None
     casas_decimais: int = 1
+    # Só pros campos bilaterais numéricos, no PDF: "maior" = mais é melhor
+    # (força, alcance, saltos); "menor" = menos é melhor (tempo de salto);
+    # None = sem direção clara (flexibilidade, amplitude) — nenhum lado é
+    # destacado como o mais fraco nos gráficos de evolução.
+    sentido: str | None = "maior"
 
 
 @dataclass(frozen=True)
@@ -167,15 +172,15 @@ _MMII_MOBILIDADE = Secao(
     campos=(
         Campo(
             "flexibilidade_isquiotibiais", "Flexibilidade de isquiotibiais", "bilateral_numero", unidade="°",
-            ajuda="Referência: quanto mais próximo de 0°, mais flexível.",
+            ajuda="Referência: quanto mais próximo de 0°, mais flexível.", sentido=None,
         ),
         Campo(
             "rigidez_quadril", "Rigidez de quadril", "bilateral_numero", unidade="°",
-            ajuda="Referência: 30°–40°.",
+            ajuda="Referência: 30°–40°.", sentido=None,
         ),
         Campo(
             "lunge_test", "Lunge test (dorsiflexão de tornozelo)", "bilateral_numero", unidade="°",
-            ajuda="Referência: 35°–45° (média de 3 valores).",
+            ajuda="Referência: 35°–45° (média de 3 valores).", sentido=None,
         ),
         Campo("thomas_iliopsoas", "Teste de Thomas — Iliopsoas", "bilateral_sinal"),
         Campo("thomas_reto_femoral", "Teste de Thomas — Reto femoral", "bilateral_sinal"),
@@ -207,7 +212,7 @@ _MMII_CONTROLE_MOTOR = Secao(
     campos=(
         Campo(
             "estabilidade_lombo_pelvica", "Estabilidade lombo-pélvica", "bilateral_numero", unidade="°",
-            ajuda="Referência: 0°.",
+            ajuda="Referência: 0°.", sentido=None,
         ),
         Campo(
             "prancha_lateral", "Prancha lateral", "bilateral_tempo",
@@ -252,7 +257,7 @@ _MMII_Y_BALANCE = Secao(
         Campo("anterior", "Anterior", "bilateral_numero", unidade="cm"),
         Campo("postero_medial", "Póstero-medial", "bilateral_numero", unidade="cm"),
         Campo("postero_lateral", "Póstero-lateral", "bilateral_numero", unidade="cm"),
-        Campo("comprimento_membro", "Comprimento do membro (EIAS–maléolo)", "bilateral_numero", unidade="cm"),
+        Campo("comprimento_membro", "Comprimento do membro (EIAS–maléolo)", "bilateral_numero", unidade="cm", sentido=None),
         Campo("discrepancia_membros", "Discrepância entre membros", "unico_numero", unidade="cm"),
     ),
 )
@@ -263,8 +268,8 @@ _MMII_HOP_TEST = Secao(
     campos=(
         Campo("single_hop", "Single Hop", "bilateral_numero", unidade="cm"),
         Campo("triple_hop", "Triple Hop", "bilateral_numero", unidade="cm"),
-        Campo("cross_over_hop", "Cross Over Hop", "bilateral_numero", unidade="segundos"),
-        Campo("seis_m_hop", "6 m Hop", "bilateral_numero", unidade="segundos"),
+        Campo("cross_over_hop", "Cross Over Hop", "bilateral_numero", unidade="segundos", sentido="menor"),
+        Campo("seis_m_hop", "6 m Hop", "bilateral_numero", unidade="segundos", sentido="menor"),
     ),
 )
 
@@ -296,9 +301,9 @@ _MMSS_AVALIACAO = Secao(
     id="mmss_avaliacao",
     titulo="Avaliação de Membros Superiores",
     campos=(
-        Campo("adm_rotadores_internos", "ADM Rotadores Internos", "bilateral_numero", unidade="°"),
-        Campo("adm_rotadores_externos", "ADM Rotadores Externos", "bilateral_numero", unidade="°"),
-        Campo("gird", "GIRD", "bilateral_numero", unidade="°"),
+        Campo("adm_rotadores_internos", "ADM Rotadores Internos", "bilateral_numero", unidade="°", sentido=None),
+        Campo("adm_rotadores_externos", "ADM Rotadores Externos", "bilateral_numero", unidade="°", sentido=None),
+        Campo("gird", "GIRD", "bilateral_numero", unidade="°", sentido=None),
         Campo("encurtamento_peitoral", "Encurtamento de Peitoral", "bilateral_sinal"),
         Campo("encurtamento_grande_dorsal", "Encurtamento de Grande Dorsal", "bilateral_sinal"),
         Campo("prancha_frontal", "Prancha Frontal", "bilateral_tempo"),

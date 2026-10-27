@@ -2,6 +2,11 @@ streamlit>=1.37
 reportlab>=4.2
 tzdata>=2024.1
 requests>=2.31
+# Anexar páginas do relatório do Kinology ao PDF final.
+pypdf>=5.0
+# Histórico das avaliações numa planilha Google (gráficos de evolução).
+google-api-python-client>=2.140
+google-auth>=2.34
 
 # Instala o próprio pacote (src/avaliacao_fisio) em modo editável, para que
 # "import avaliacao_fisio" funcione tanto localmente quanto no Streamlit
