@@ -183,9 +183,10 @@ independente):
 - Se a API falhar ou o token não estiver configurado,
   `_listar_pacientes_bruto()` devolve lista vazia silenciosamente — o
   campo degrada pra digitação livre, nunca quebra o wizard.
-- **Pendência de produção**: `FEEGOW_API_TOKEN`/`FEEGOW_API_BASE_URL`
-  precisam estar nos Secrets do Streamlit Cloud (não só no
-  `.streamlit/secrets.toml` local) — confirmar se ainda não foi feito.
+- **Confirmado em produção (27/10/2026)**: `FEEGOW_API_TOKEN` e
+  `FEEGOW_API_BASE_URL` já estão nos Secrets do Streamlit Cloud, na
+  ordem certa (antes do bloco `[auth.users]`) — a busca de paciente
+  funciona no app publicado, não só local.
 
 ### PDF (`pdf_avaliacao.py`)
 
@@ -317,8 +318,6 @@ com `pypdf` pra confirmar que os dados chegaram no PDF final).
 
 - Validar no tablet físico de verdade: câmera, upload de vídeo, toque
   (scroll-avançar, botões de navegação) — só testado via Playwright/AppTest.
-- Confirmar que `FEEGOW_API_TOKEN`/`FEEGOW_API_BASE_URL` estão
-  configurados nos Secrets do Streamlit Cloud (produção), não só local.
 - Layout fino do MMSS (reconstruído sem PDF limpo de referência) —
   validar contra o uso real.
 - Interpretação assumida sem perguntar de novo (avisar se errada): "puxar
