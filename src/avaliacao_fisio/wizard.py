@@ -19,13 +19,23 @@ from __future__ import annotations
 
 import datetime as dt
 import html
+import re
 import time
 import uuid
 
 import streamlit as st
 import streamlit.components.v1 as components
 
-from avaliacao_fisio import assimetria, estilo, feegow_client, historico, pdf_anexos, pdf_avaliacao, runscribe_client
+from avaliacao_fisio import (
+    assimetria,
+    estilo,
+    feegow_client,
+    historico,
+    pdf_anexos,
+    pdf_avaliacao,
+    pdfs_drive,
+    runscribe_client,
+)
 from avaliacao_fisio.protocolos import (
     METRICAS_RUNSCRIBE,
     PROTOCOLO_MMII,
@@ -162,6 +172,50 @@ def renderizar_secao(secao: Secao, titulo: bool = True) -> None:
         st.divider()
 
 
+def _avaliacoes_anteriores(texto_paciente: str | None) -> None:
+    """PDFs já guardados no Drive pra este paciente, pra consultar numa
+    reavaliação. Sem Drive configurado ou com falha de rede, não aparece nada
+    (nunca trava o preenchimento)."""
+    if not texto_paciente or not pdfs_drive.configurado():
+        return
+    reavaliacao = st.session_state.get("tipo_avaliacao") == "Reavaliação"
+    paciente = historico.identificar_paciente(texto_paciente)
+    try:
+        arquivos = pdfs_drive.listar_cache(paciente["chave"], paciente["nome"])
+    except Exception:
+        if reavaliacao:
+            st.caption("Não consegui consultar as avaliações anteriores no Drive agora.")
+        return
+    arquivos = [a for a in arquivos if a["id_avaliacao"] != st.session_state.get("id_avaliacao")]
+    if not arquivos:
+        if reavaliacao:
+            st.caption("Nenhuma avaliação anterior guardada para este paciente. Só aparecem as feitas depois que o Drive foi ligado.")
+        return
+
+    with st.expander(f"Avaliações anteriores deste paciente ({len(arquivos)})", expanded=reavaliacao):
+        for arquivo in arquivos[:5]:
+            data = dt.date.fromisoformat(arquivo["data"]) if re.fullmatch(r"\d{4}-\d{2}-\d{2}", arquivo["data"]) else None
+            rotulo = " · ".join(p for p in (
+                data.strftime("%d/%m/%Y") if data else arquivo["data"], arquivo["protocolo"], arquivo["tipo"],
+            ) if p)
+            chave_pdf = f"pdf_anterior_{arquivo['id']}"
+            col_texto, col_acao = st.columns([3, 2])
+            col_texto.markdown(rotulo)
+            with col_acao:
+                if chave_pdf in st.session_state:
+                    st.download_button(
+                        "⬇ Baixar PDF", data=st.session_state[chave_pdf], file_name=arquivo["nome"],
+                        mime="application/pdf", key=f"baixar_{arquivo['id']}",
+                    )
+                elif st.button("Abrir PDF", key=f"abrir_{arquivo['id']}"):
+                    try:
+                        st.session_state[chave_pdf] = pdfs_drive.baixar(arquivo["id"])
+                    except Exception:
+                        st.error("Não consegui baixar este PDF do Drive.")
+                    else:
+                        st.rerun()
+
+
 def _widget_tempo(chave_base: str, visivel: bool = True) -> None:
     """Dois `number_input` (minutos, segundos) — usado por
     "bilateral_tempo"/"unico_tempo" (ex.: prancha lateral em min/seg em
@@ -227,6 +281,7 @@ def _renderizar_campo(secao_id: str, campo: Campo) -> None:
                 _guardar(chave_nasc, registro["nascimento"])
                 st.session_state[f"w__{chave_nasc}"] = registro["nascimento"]
         _guardar(chave, valor)
+        _avaliacoes_anteriores(valor)
     elif tipo == "unico_numero":
         rotulo = f"{campo.rotulo} ({campo.unidade})" if campo.unidade else campo.rotulo
         passo = float(10 ** -campo.casas_decimais)
@@ -833,6 +888,13 @@ def _gerar_pdf_final(dados: dict, kinology_bytes: bytes | None, kinology_paginas
     pdf = pdf_avaliacao.gerar(dados, series)
     if kinology_bytes and kinology_paginas:
         pdf = pdf_anexos.anexar(pdf, kinology_bytes, kinology_paginas)
+
+    st.session_state.pop("drive_guardado", None)
+    if pdfs_drive.configurado():
+        try:
+            st.session_state["drive_guardado"] = pdfs_drive.salvar_pdf(pdf, dados)["nome"]
+        except Exception:
+            avisos.append("Não consegui guardar uma cópia do PDF no Drive: baixe o arquivo abaixo para não perdê-lo.")
     return pdf, avisos
 
 
@@ -912,6 +974,8 @@ def _passo_revisao(protocolo: Protocolo) -> None:
         for aviso in st.session_state.get("avisos_pdf", []):
             st.warning(aviso)
         st.success("PDF gerado! Baixe abaixo e abra no visualizador do tablet para imprimir.")
+        if st.session_state.get("drive_guardado"):
+            st.caption("Cópia guardada no Drive da clínica: aparece nas próximas avaliações deste paciente.")
         st.download_button(
             "⬇ Baixar PDF",
             data=st.session_state["pdf_bytes"],

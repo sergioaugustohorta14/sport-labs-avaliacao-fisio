@@ -310,6 +310,30 @@ diretoria liberando o uso da conta da clínica.
 - Passo dos `number_input` é decimal (`float(10 ** -casas)`): passo inteiro com
   formato "%.0f" gera aviso de console do Streamlit.
 
+### PDFs guardados no Drive (`pdfs_drive.py`)
+
+Desenvolvido em 28/10/2026 a pedido do Sergio: o fisioterapeuta abre o PDF da
+avaliação anterior numa reavaliação. A recepção também anexa o PDF no Feegow
+(processo manual deles, fora do app).
+
+- **Config:** `GOOGLE_DRIVE_PASTA_ID` nos Secrets (chave de nível raiz, ANTES de
+  qualquer `[tabela]`), pasta compartilhada com a conta de serviço como Editor e
+  **Google Drive API ativada** no projeto do Google Cloud (sem isso: 403
+  "API has not been used"). Escopo `drive`. Sem config o app segue normal.
+- **Pasta plana:** nome `Paciente - AAAA-MM-DD - Protocolo.pdf`; o vínculo com o
+  paciente fica em `appProperties` (`paciente_chave`, `paciente_nome` normalizado,
+  `id_avaliacao`, `data_avaliacao`, `protocolo`, `tipo_avaliacao`). A busca casa por
+  ID do Feegow OU nome sem acento/caixa (mesma regra do `historico.py`).
+- **Gerar de novo a mesma avaliação** atualiza o arquivo (acha pelo `id_avaliacao`).
+  Nunca apaga nada. `baixar()` só aceita arquivo dentro da pasta configurada.
+- **Tela:** `_avaliacoes_anteriores()` aparece logo abaixo do campo do paciente
+  (aberta em Reavaliação), até 5 PDFs, botão "Abrir PDF" -> "Baixar PDF".
+  Listagem em cache de 2 min (limpo ao guardar). Falha de rede/cota nunca bloqueia
+  o PDF: vira aviso na Revisão.
+- **Atenção:** o PDF tem dado de saúde e fotos: a pasta tem que ser privada
+  (restrita à equipe). Risco conhecido: conta de serviço gravando em "Meu Drive"
+  pode dar `storageQuotaExceeded`; solução: Unidade Compartilhada.
+
 ### Relatório do Kinology anexado (`pdf_anexos.py`)
 
 Na Revisão, bloco "Relatório do Kinology (opcional)": `st.file_uploader` +

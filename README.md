@@ -77,6 +77,27 @@ GOOGLE_AVALIACOES_SHEET_ID = "id-da-planilha"
 # conteúdo do JSON da conta de serviço (type, project_id, private_key, ...)
 ```
 
+## PDFs guardados no Google Drive
+
+Ao gerar o PDF, o app guarda uma cópia numa pasta do Drive da clínica. Na
+seção Dados do Paciente, ao escolher um paciente que já tem avaliações
+guardadas, aparece "Avaliações anteriores deste paciente" com botão para
+abrir/baixar cada PDF (útil na reavaliação). Gerar de novo a mesma avaliação
+atualiza o arquivo, não duplica.
+
+1. Crie a pasta e compartilhe com o e-mail da conta de serviço do Google
+   como **Editor**. A pasta deve ser privada (o PDF tem dado de saúde e fotos).
+2. Ative a **Google Drive API** no mesmo projeto do Google Cloud da conta de serviço.
+3. Nos Secrets (local e Streamlit Cloud), como chave de nível raiz **antes**
+   de qualquer `[tabela]`:
+
+```toml
+GOOGLE_DRIVE_PASTA_ID = "id-da-pasta"
+```
+
+Sem isso o app funciona normalmente, só sem guardar/consultar os PDFs. Falha
+do Drive nunca impede o PDF.
+
 ## Protocolo de Corrida (RunScribe)
 
 O protocolo "Corrida" importa as métricas por pé (cadência, tempo de contato,
@@ -109,6 +130,8 @@ as páginas que entram no fim do PDF do paciente (sem alteração).
 - `src/avaliacao_fisio/historico.py`, `google_sheets_client.py` —
   histórico das avaliações na planilha Google.
 - `src/avaliacao_fisio/pdf_anexos.py` — anexo de páginas do Kinology.
+- `src/avaliacao_fisio/pdfs_drive.py` — cópia dos PDFs na pasta do Drive e
+  consulta das avaliações anteriores do paciente.
 - `src/avaliacao_fisio/assimetria.py` — regra de assimetria (10% / 20%).
 - `src/avaliacao_fisio/auth.py` — tela de login opcional (usuário/senha
   via Secrets).
