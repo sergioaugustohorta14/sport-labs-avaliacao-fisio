@@ -4,3 +4,5 @@ __pycache__/
 *.egg-info/
 .streamlit/secrets.toml
 exemplos_pdf/
+client_secret*.json
+*_para_colar.txt

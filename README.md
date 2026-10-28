@@ -85,15 +85,27 @@ guardadas, aparece "Avaliações anteriores deste paciente" com botão para
 abrir/baixar cada PDF (útil na reavaliação). Gerar de novo a mesma avaliação
 atualiza o arquivo, não duplica.
 
-1. Crie a pasta e compartilhe com o e-mail da conta de serviço do Google
-   como **Editor**. A pasta deve ser privada (o PDF tem dado de saúde e fotos).
-2. Ative a **Google Drive API** no mesmo projeto do Google Cloud da conta de serviço.
-3. Nos Secrets (local e Streamlit Cloud), como chave de nível raiz **antes**
-   de qualquer `[tabela]`:
+Grava como a conta Google da clínica (a conta de serviço não tem cota de
+armazenamento e o Google recusa criar arquivos com ela).
+
+1. Ative a **Google Drive API** no projeto do Google Cloud.
+2. Crie uma credencial **OAuth (app para computador)** e baixe o JSON para
+   `.streamlit/client_secret.json` (ignorado pelo Git).
+3. Rode uma vez `./.venv/Scripts/python.exe scripts/autorizar_drive.py` (precisa de
+   `pip install google-auth-oauthlib`): você aprova no navegador, ele cria a pasta
+   privada e grava os valores em `.streamlit/drive_secrets_para_colar.txt`.
+4. Cole esses 4 valores nos Secrets (local e Streamlit Cloud), como chaves de
+   nível raiz **antes** de qualquer `[tabela]`, e apague o arquivo:
 
 ```toml
+GOOGLE_DRIVE_CLIENT_ID = "..."
+GOOGLE_DRIVE_CLIENT_SECRET = "..."
+GOOGLE_DRIVE_REFRESH_TOKEN = "..."
 GOOGLE_DRIVE_PASTA_ID = "id-da-pasta"
 ```
+
+A pasta deve ser privada (o PDF tem dado de saúde e fotos). O escopo é
+`drive.file`: o app só enxerga a pasta e os PDFs que ele mesmo criou.
 
 Sem isso o app funciona normalmente, só sem guardar/consultar os PDFs. Falha
 do Drive nunca impede o PDF.

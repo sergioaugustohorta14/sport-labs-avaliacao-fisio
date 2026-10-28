@@ -316,10 +316,19 @@ Desenvolvido em 28/10/2026 a pedido do Sergio: o fisioterapeuta abre o PDF da
 avaliação anterior numa reavaliação. A recepção também anexa o PDF no Feegow
 (processo manual deles, fora do app).
 
-- **Config:** `GOOGLE_DRIVE_PASTA_ID` nos Secrets (chave de nível raiz, ANTES de
-  qualquer `[tabela]`), pasta compartilhada com a conta de serviço como Editor e
-  **Google Drive API ativada** no projeto do Google Cloud (sem isso: 403
-  "API has not been used"). Escopo `drive`. Sem config o app segue normal.
+- **Config:** grava como a conta Google da clínica (Gmail comum), via OAuth com
+  refresh token. **Conta de serviço NÃO serve** pra gravar: o Google responde 403
+  "Service Accounts do not have storage quota" (testado em 28/10/2026; só leitura
+  funcionava; Unidade Compartilhada exigiria Workspace). Passo único:
+  `scripts/autorizar_drive.py` (precisa de `google-auth-oauthlib` só nele) abre o
+  navegador, cria a pasta "Avaliações Cinético Funcionais" e grava os 4 valores
+  (`GOOGLE_DRIVE_CLIENT_ID`, `_CLIENT_SECRET`, `_REFRESH_TOKEN`, `GOOGLE_DRIVE_PASTA_ID`)
+  em `.streamlit/drive_secrets_para_colar.txt` (ignorado pelo Git) pra colar nos
+  Secrets (chaves de nível raiz, ANTES de qualquer `[tabela]`). Também precisa da
+  **Google Drive API ativada** no projeto (sem isso: 403 "API has not been used").
+  Escopo `drive.file`: o app só vê o que ele mesmo criou. Se o OAuth ficar em
+  modo "Teste" na tela de consentimento, o refresh token expira em 7 dias:
+  publicar o app ("Em produção"). Sem config o app segue normal.
 - **Pasta plana:** nome `Paciente - AAAA-MM-DD - Protocolo.pdf`; o vínculo com o
   paciente fica em `appProperties` (`paciente_chave`, `paciente_nome` normalizado,
   `id_avaliacao`, `data_avaliacao`, `protocolo`, `tipo_avaliacao`). A busca casa por
@@ -331,8 +340,8 @@ avaliação anterior numa reavaliação. A recepção também anexa o PDF no Fee
   Listagem em cache de 2 min (limpo ao guardar). Falha de rede/cota nunca bloqueia
   o PDF: vira aviso na Revisão.
 - **Atenção:** o PDF tem dado de saúde e fotos: a pasta tem que ser privada
-  (restrita à equipe). Risco conhecido: conta de serviço gravando em "Meu Drive"
-  pode dar `storageQuotaExceeded`; solução: Unidade Compartilhada.
+  (restrita à equipe). A primeira pasta que o Sergio criou à mão estava como
+  "qualquer pessoa com o link pode editar": conferir sempre o compartilhamento.
 
 ### Relatório do Kinology anexado (`pdf_anexos.py`)
 

@@ -1,9 +1,12 @@
 """PDFs das avaliações guardados numa pasta do Google Drive, pra o fisioterapeuta
 abrir a avaliação anterior numa reavaliação.
 
-Mesma conta de serviço do histórico em planilha: a pasta precisa estar
-compartilhada com o e-mail dela como **Editor**. O ID da pasta vai nos Secrets
-(`GOOGLE_DRIVE_PASTA_ID`, chave de nível raiz, antes de qualquer `[tabela]`).
+Grava como a conta Google da clínica (OAuth com refresh token), porque conta de
+serviço não tem cota de armazenamento e o Google recusa criar arquivos ("Service
+Accounts do not have storage quota"). A pasta e o token são criados uma vez por
+`scripts/autorizar_drive.py`; os 4 valores vão nos Secrets como chaves de nível
+raiz, antes de qualquer `[tabela]`: `GOOGLE_DRIVE_CLIENT_ID`,
+`GOOGLE_DRIVE_CLIENT_SECRET`, `GOOGLE_DRIVE_REFRESH_TOKEN`, `GOOGLE_DRIVE_PASTA_ID`.
 
 Pasta única e plana: o nome do arquivo começa pelo paciente (fica agrupado na
 ordem alfabética) e o vínculo com o paciente está nas propriedades do arquivo
@@ -20,17 +23,22 @@ import re
 
 import streamlit as st
 
-from avaliacao_fisio.config import obter_config, obter_secret_tabela
+from avaliacao_fisio.config import obter_config
 from avaliacao_fisio.historico import normalizar
 from avaliacao_fisio.protocolos import PROTOCOLOS
 
-_ESCOPO = ["https://www.googleapis.com/auth/drive"]
+# `drive.file`: o app só enxerga o que ele mesmo criou (a pasta e os PDFs), nada mais do Drive.
+_ESCOPO = ["https://www.googleapis.com/auth/drive.file"]
+_TOKEN_URI = "https://oauth2.googleapis.com/token"
 _CAMPOS = "id, name, appProperties, createdTime, modifiedTime"
 _MAX_PROP = 90  # appProperties: chave + valor somam no máximo 124 bytes
 
 
+_CHAVES_OAUTH = ("GOOGLE_DRIVE_CLIENT_ID", "GOOGLE_DRIVE_CLIENT_SECRET", "GOOGLE_DRIVE_REFRESH_TOKEN")
+
+
 def configurado() -> bool:
-    return bool(obter_config("GOOGLE_DRIVE_PASTA_ID")) and bool(obter_secret_tabela("gcp_service_account"))
+    return bool(obter_config("GOOGLE_DRIVE_PASTA_ID")) and all(obter_config(c) for c in _CHAVES_OAUTH)
 
 
 def _pasta_id() -> str:
@@ -42,13 +50,16 @@ def _pasta_id() -> str:
 
 @st.cache_resource(show_spinner=False)
 def _servico():
-    from google.oauth2 import service_account
+    from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
 
-    info = obter_secret_tabela("gcp_service_account")
-    if not info:
-        raise RuntimeError("[gcp_service_account] não configurado nos Secrets.")
-    credenciais = service_account.Credentials.from_service_account_info(info, scopes=_ESCOPO)
+    if not all(obter_config(c) for c in _CHAVES_OAUTH):
+        raise RuntimeError("Credenciais OAuth do Drive não configuradas nos Secrets.")
+    credenciais = Credentials(
+        None, refresh_token=obter_config("GOOGLE_DRIVE_REFRESH_TOKEN"), token_uri=_TOKEN_URI,
+        client_id=obter_config("GOOGLE_DRIVE_CLIENT_ID"), client_secret=obter_config("GOOGLE_DRIVE_CLIENT_SECRET"),
+        scopes=_ESCOPO,
+    )
     return build("drive", "v3", credentials=credenciais, cache_discovery=False)
 
 
