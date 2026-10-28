@@ -33,7 +33,13 @@ def main() -> None:
 
     fluxo = InstalledAppFlow.from_client_secrets_file(str(caminho), ESCOPO)
     # offline + consent: garante o refresh token mesmo se a conta já autorizou antes.
-    credenciais = fluxo.run_local_server(port=0, access_type="offline", prompt="consent")
+    # Não abre o navegador sozinho (pode cair no perfil/conta errada): imprime o link
+    # pra colar no navegador onde a conta da clínica está conectada.
+    credenciais = fluxo.run_local_server(
+        port=8788, open_browser=False, access_type="offline", prompt="consent",
+        authorization_prompt_message="Abra este link no navegador com a conta da clinica:\n{url}\n",
+        success_message="Autorizado. Pode fechar esta aba.",
+    )
     if not credenciais.refresh_token:
         raise SystemExit("O Google não devolveu o refresh token. Revogue o acesso do app na conta e rode de novo.")
 
